@@ -3,6 +3,8 @@ package com.vsmanager
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -10,14 +12,23 @@ import android.os.Environment
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.transition.Fade
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.PopupWindow
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
@@ -26,6 +37,8 @@ import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -80,8 +93,8 @@ class MainActivity : AppCompatActivity() {
         if (isSelectionMode) {
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.setHomeAsUpIndicator(android.R.drawable.ic_menu_close_clear_cancel)
-            toolbar.title = "${selectedFiles.size}"
-            toolbar.subtitle = "Selecionados"
+            toolbar.title = "${selectedFiles.size} selecionados"
+            toolbar.subtitle = ""
         } else {
             if (currentDir?.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
                 supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -89,7 +102,14 @@ class MainActivity : AppCompatActivity() {
             } else {
                 supportActionBar?.setDisplayHomeAsUpEnabled(false)
             }
-            toolbar.title = "VSManager"
+            
+            val folderName = if (currentDir?.absolutePath == Environment.getExternalStorageDirectory().absolutePath) {
+                "Armazenamento Interno"
+            } else {
+                currentDir?.name ?: "Armazenamento"
+            }
+            
+            toolbar.title = folderName
             toolbar.subtitle = currentDir?.absolutePath ?: ""
         }
         invalidateOptionsMenu()
@@ -166,7 +186,7 @@ class MainActivity : AppCompatActivity() {
                 if (file.isDirectory) {
                     loadFiles(file)
                 } else if (file.name.endsWith(".apk", ignoreCase = true)) {
-                    showApkOptions(file) // Abre o diálogo bonito para APK
+                    showApkOptions(file)
                 } else {
                     Toast.makeText(this, "Abrir: ${file.name}", Toast.LENGTH_SHORT).show()
                 }
@@ -176,17 +196,139 @@ class MainActivity : AppCompatActivity() {
             },
             onLongClick = { file ->
                 if (!isSelectionMode) {
-                    isSelectionMode = true
-                    selectedFiles.add(file)
-                    updateToolbar()
-                    setupAdapter(allFiles)
+                    showContextMenu(file)
+                } else {
+                    toggleSelection(file)
                 }
             }
         )
         recyclerView.adapter = adapter
     }
 
-    // --- Lógica do APK (Imagem 2 e 3) ---
+    // --- POPUP CUSTOMIZADO DO CLAUDE ---
+    private data class PopupItem(val title: String, val iconRes: Int, val onClick: () -> Unit)
+
+    private fun showStyledPopup(anchor: View, items: List<PopupItem>, above: Boolean = false) {
+        val root = LayoutInflater.from(this).inflate(R.layout.popup_menu, null)
+        val container = root.findViewById<LinearLayout>(R.id.popupItems)
+
+        val popup = PopupWindow(
+            root,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            elevation = 16f * resources.displayMetrics.density
+            enterTransition = Fade()
+            exitTransition = Fade()
+        }
+
+        items.forEach { item ->
+            val row = LayoutInflater.from(this).inflate(R.layout.item_popup, container, false)
+            row.findViewById<ImageView>(R.id.itemIcon).setImageResource(item.iconRes)
+            row.findViewById<TextView>(R.id.itemTitle).text = item.title
+            row.setOnClickListener { popup.dismiss(); item.onClick() }
+            container.addView(row)
+        }
+
+        if (above) {
+            root.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            popup.showAsDropDown(anchor, 0, -(anchor.height + root.measuredHeight), Gravity.END)
+        } else {
+            popup.showAsDropDown(anchor, 0, 0, Gravity.END)
+        }
+    }
+
+    private fun showFabMenu(anchorView: View) {
+        showStyledPopup(
+            anchorView,
+            listOf(
+                PopupItem("Nova pasta", R.drawable.ic_create_new_folder) { showCreateDialog(true) },
+                PopupItem("Novo arquivo", R.drawable.ic_note_add) { showCreateDialog(false) }
+            ),
+            above = true
+        )
+    }
+
+    private fun showOptionsMenu(anchorView: View) {
+        showStyledPopup(
+            anchorView,
+            listOf(
+                PopupItem(
+                    if (showHiddenFiles) "Ocultar arquivos ocultos" else "Mostrar ocultos",
+                    R.drawable.ic_visibility
+                ) {
+                    showHiddenFiles = !showHiddenFiles
+                    currentDir?.let { loadFiles(it) }
+                },
+                PopupItem("Terminal", R.drawable.ic_terminal) {
+                    Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show()
+                }
+            )
+        )
+    }
+
+    private fun showCreateDialog(isFolder: Boolean) {
+        val view = layoutInflater.inflate(R.layout.dialog_create, null)
+        val inputLayout = view.findViewById<TextInputLayout>(R.id.inputLayout)
+        val input = view.findViewById<TextInputEditText>(R.id.inputName)
+
+        inputLayout.hint = if (isFolder) "Nome da pasta" else "Nome do arquivo"
+        inputLayout.setStartIconDrawable(
+            if (isFolder) R.drawable.ic_create_new_folder else R.drawable.ic_note_add
+        )
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.RoundedDialog)
+            .setTitle(if (isFolder) "Nova pasta" else "Novo arquivo")
+            .setView(view)
+            .setPositiveButton("Criar", null)
+            .setNegativeButton("Cancelar", null)
+            .create()
+
+        dialog.setOnShowListener {
+            input.requestFocus()
+            dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = input.text.toString().trim()
+                val newFile = File(currentDir, name)
+                when {
+                    name.isEmpty() -> inputLayout.error = "Digite um nome"
+                    newFile.exists() -> inputLayout.error = "Já existe com esse nome"
+                    else -> try {
+                        if (isFolder) newFile.mkdirs() else newFile.createNewFile()
+                        loadFiles(currentDir!!)
+                        dialog.dismiss()
+                    } catch (e: Exception) {
+                        inputLayout.error = "Erro: ${e.message}"
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    // --- Lógica de Contexto ---
+    private fun showContextMenu(file: File) {
+        val options = arrayOf("Copiar", "Mover", "Renomear", "Excluir", "Informações")
+        MaterialAlertDialogBuilder(this)
+            .setTitle(file.name)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> Toast.makeText(this, "Copiar em breve", Toast.LENGTH_SHORT).show()
+                    1 -> Toast.makeText(this, "Mover em breve", Toast.LENGTH_SHORT).show()
+                    2 -> renameFile(file)
+                    3 -> deleteFile(file)
+                    4 -> showFileInfo(file)
+                }
+            }
+            .show()
+    }
+
     private fun showApkOptions(file: File) {
         val options = arrayOf("Instalar", "Visualizar Conteúdo", "Informações")
         MaterialAlertDialogBuilder(this)
@@ -234,7 +376,7 @@ class MainActivity : AppCompatActivity() {
         updateToolbar()
     }
 
-    // --- Lupa ---
+    // --- Busca ---
     private fun activateSearch() {
         if (isSearching) { closeSearch(); return }
 
@@ -284,23 +426,6 @@ class MainActivity : AppCompatActivity() {
         updateToolbar()
     }
 
-    // --- Menu de Contexto ---
-    private fun showContextMenu(file: File) {
-        val options = arrayOf("Copiar", "Mover", "Renomear", "Excluir", "Informações")
-        MaterialAlertDialogBuilder(this)
-            .setTitle(file.name)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> Toast.makeText(this, "Copiar em breve", Toast.LENGTH_SHORT).show()
-                    1 -> Toast.makeText(this, "Mover em breve", Toast.LENGTH_SHORT).show()
-                    2 -> renameFile(file)
-                    3 -> deleteFile(file)
-                    4 -> showFileInfo(file)
-                }
-            }
-            .show()
-    }
-
     private fun renameFile(file: File) {
         val input = EditText(this)
         input.setText(file.name)
@@ -343,7 +468,6 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // --- Menus ---
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.clear()
         if (isSelectionMode) {
@@ -385,63 +509,6 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "$sucesso itens excluídos", Toast.LENGTH_SHORT).show()
                 clearSelection()
                 loadFiles(currentDir!!)
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
-
-    private fun showOptionsMenu(anchorView: View) {
-        val popup = PopupMenu(this, anchorView, Gravity.END)
-        popup.menu.add("Mostrar ocultos")
-        popup.menu.add("Terminal")
-        
-        popup.setOnMenuItemClickListener { item ->
-            when (item.title) {
-                "Mostrar ocultos" -> {
-                    showHiddenFiles = !showHiddenFiles
-                    currentDir?.let { loadFiles(it) }
-                    true
-                }
-                "Terminal" -> { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show(); true }
-                else -> false
-            }
-        }
-        popup.show()
-    }
-
-    private fun showFabMenu(anchorView: View) {
-        val popup = PopupMenu(this, anchorView)
-        popup.menu.add("Nova pasta")
-        popup.menu.add("Novo arquivo")
-        
-        popup.setOnMenuItemClickListener { item ->
-            if (item.title == "Nova pasta") {
-                showCreateDialog(true)
-                true
-            } else {
-                showCreateDialog(false)
-                true
-            }
-        }
-        popup.show()
-    }
-
-    private fun showCreateDialog(isFolder: Boolean) {
-        val input = EditText(this)
-        val title = if (isFolder) "Nova Pasta" else "Novo Arquivo"
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle(title)
-            .setView(input)
-            .setPositiveButton("Criar") { _, _ ->
-                val name = input.text.toString()
-                val newFile = File(currentDir, name)
-                try {
-                    if (isFolder) newFile.mkdirs() else newFile.createNewFile()
-                    loadFiles(currentDir!!)
-                } catch (e: Exception) {
-                    Toast.makeText(this, "Erro", Toast.LENGTH_SHORT).show()
-                }
             }
             .setNegativeButton("Cancelar", null)
             .show()

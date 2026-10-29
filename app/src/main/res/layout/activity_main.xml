@@ -20,13 +20,15 @@
             app:subtitleTextColor="#888888" />
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Adicionado scrollbars para mostrar a rolagem -->
+    <!-- Barra de rolagem mais grossa e visível -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scrollbars="vertical"
         android:fadeScrollbars="false"
+        android:scrollbarThumbVertical="@drawable/scrollbar_thumb"
+        android:scrollbarSize="8dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <FrameLayout
@@ -45,6 +47,6 @@
             android:layout_height="32dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_add"
-            app:tint="#121212" />
+            app:tint="#FFFFFF" /> <!-- Ícone branco para contraste -->
     </FrameLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

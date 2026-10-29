@@ -39,11 +39,31 @@ class FileAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val file = files[position]
         holder.name.text = file.name
+        
+        holder.icon.setBackgroundColor(android.graphics.Color.TRANSPARENT)
 
         if (file.isDirectory) {
-            holder.icon.setImageResource(R.drawable.ic_folder)
+            // Lógica para Ícone de App dentro de Android/data ou obb
+            val isAndroidData = file.parentFile?.name == "data" || file.parentFile?.name == "obb"
+            var appIconLoaded = false
+
+            if (isAndroidData) {
+                try {
+                    val pm = holder.itemView.context.packageManager
+                    val appInfo = pm.getApplicationInfo(file.name, 0)
+                    Glide.with(holder.itemView.context)
+                        .load(pm.getApplicationIcon(appInfo))
+                        .into(holder.icon)
+                    appIconLoaded = true
+                } catch (e: Exception) {
+                    // App não instalado, usa ícone de pasta normal
+                }
+            }
+
+            if (!appIconLoaded) {
+                holder.icon.setImageResource(R.drawable.ic_folder)
+            }
             
-            // Lógica para contar itens da pasta
             val count = file.listFiles()?.size ?: 0
             holder.subtitle.text = when {
                 count == 0 -> "Vazio"
@@ -57,6 +77,8 @@ class FileAdapter(
                 if (info != null) {
                     info.applicationInfo.sourceDir = file.absolutePath
                     info.applicationInfo.publicSourceDir = file.absolutePath
+                    
+                    holder.icon.setBackgroundColor(0xFF2C2C2C.toInt())
                     Glide.with(holder.itemView.context)
                         .load(info.applicationInfo.loadIcon(pm))
                         .into(holder.icon)
