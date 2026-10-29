@@ -6,8 +6,9 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import java.io.File
 
-class FileAdapter(private val items: List<String>) : RecyclerView.Adapter<FileAdapter.ViewHolder>() {
+class FileAdapter(private val files: List<File>) : RecyclerView.Adapter<FileAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val icon: ImageView = view.findViewById(R.id.folderIcon)
@@ -21,8 +22,17 @@ class FileAdapter(private val items: List<String>) : RecyclerView.Adapter<FileAd
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.name.text = items[position]
+        val file = files[position]
+        holder.name.text = file.name
+        
+        // Se for pasta, usa ícone de pasta. Se for arquivo, usa outro ícone futuramente.
+        if (file.isDirectory) {
+            holder.icon.setImageResource(R.drawable.ic_folder)
+        } else {
+            // Usa o mesmo ícone por enquanto para não quebrar o código
+            holder.icon.setImageResource(R.drawable.ic_folder) 
+        }
     }
 
-    override fun getItemCount() = items.size
+    override fun getItemCount() = files.size
 }

@@ -12,6 +12,7 @@
         android:background="#1E1E1E"
         app:elevation="4dp">
 
+        <!-- Adicionada a Toolbar com os ícones -->
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
@@ -36,7 +37,5 @@
         android:layout_margin="24dp"
         android:src="@drawable/ic_add"
         app:backgroundTint="#D3D3D3"
-        app:tint="#121212"
-        app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Full" />
-
+        app:tint="#121212" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
