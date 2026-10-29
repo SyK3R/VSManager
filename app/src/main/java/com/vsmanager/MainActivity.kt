@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.*
@@ -113,7 +112,7 @@ fun FileManagerScreen() {
                         val parent = currentDir.parentFile
                         if (parent != null) currentDir = parent
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Color.White)
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar", tint = Color.White)
                     }
                 },
                 actions = {
@@ -179,7 +178,7 @@ fun FileManagerScreen() {
                 .padding(paddingValues),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            items(files, key = { it.absolutePath }) { file -> // key para evitar lag
+            items(files, key = { it.absolutePath }) { file ->
                 FileItem(file = file) {
                     if (file.isDirectory) currentDir = file
                 }
