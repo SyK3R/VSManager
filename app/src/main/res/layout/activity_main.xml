@@ -18,9 +18,26 @@
             android:layout_height="?attr/actionBarSize"
             app:titleTextColor="#FFFFFF"
             app:subtitleTextColor="#888888" />
+            
+        <LinearLayout android:id="@+id/headerPath" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="vertical"
+            android:background="#1E1E1E" android:paddingBottom="10dp">
+            <HorizontalScrollView android:id="@+id/crumbScroll" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:scrollbars="none">
+                <LinearLayout android:id="@+id/crumbs" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:orientation="horizontal"
+                    android:gravity="center_vertical" android:paddingStart="12dp" android:paddingEnd="12dp"/>
+            </HorizontalScrollView>
+            <ProgressBar android:id="@+id/storageBar" style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent" android:layout_height="5dp"
+                android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="10dp"
+                android:progressTint="#7C9CFF" android:progressBackgroundTint="#33FFFFFF"/>
+            <TextView android:id="@+id/storageText" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:layout_marginStart="16dp"
+                android:layout_marginTop="4dp" android:textColor="#9A9AA5" android:textSize="12sp"/>
+        </LinearLayout>
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Barra de rolagem mais grossa e visível -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
@@ -47,6 +64,6 @@
             android:layout_height="32dp"
             android:layout_gravity="center"
             android:src="@drawable/ic_add"
-            app:tint="#FFFFFF" /> <!-- Ícone branco para contraste -->
+            app:tint="#FFFFFF" />
     </FrameLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

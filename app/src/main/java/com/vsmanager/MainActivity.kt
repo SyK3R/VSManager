@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -12,7 +13,7 @@ import android.os.Environment
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
-import android.transition.Fade
+import android.text.format.Formatter
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.Menu
@@ -21,10 +22,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.PopupWindow
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -36,6 +38,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -54,6 +57,10 @@ class MainActivity : AppCompatActivity() {
     
     private var isSelectionMode = false
     private val selectedFiles = mutableSetOf<File>()
+    
+    // Variáveis de Copiar/Mover
+    private var clipboard: List<File> = emptyList()
+    private var clipboardCut = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,16 +78,12 @@ class MainActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (isSearching) {
-                    closeSearch()
-                } else if (isSelectionMode) {
-                    clearSelection()
-                } else if (currentDir != null && currentDir!!.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
+                if (isSearching) closeSearch()
+                else if (isSelectionMode) clearSelection()
+                else if (currentDir != null && currentDir!!.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
                     val parent = currentDir!!.parentFile
                     if (parent != null) loadFiles(parent) else finish()
-                } else {
-                    finish()
-                }
+                } else finish()
             }
         })
 
@@ -88,31 +91,49 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateToolbar() {
-        if (isSearching) return
-
+        val header = findViewById<View>(R.id.headerPath)
         if (isSelectionMode) {
-            supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.setHomeAsUpIndicator(android.R.drawable.ic_menu_close_clear_cancel)
-            toolbar.title = "${selectedFiles.size} selecionados"
-            toolbar.subtitle = ""
-        } else {
-            if (currentDir?.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
-                supportActionBar?.setDisplayHomeAsUpEnabled(true)
-                supportActionBar?.setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
-            } else {
-                supportActionBar?.setDisplayHomeAsUpEnabled(false)
-            }
-            
-            val folderName = if (currentDir?.absolutePath == Environment.getExternalStorageDirectory().absolutePath) {
-                "Armazenamento Interno"
-            } else {
-                currentDir?.name ?: "Armazenamento"
-            }
-            
-            toolbar.title = folderName
-            toolbar.subtitle = currentDir?.absolutePath ?: ""
+            supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            val n = selectedFiles.size
+            toolbar.title = "$n ${if (n == 1) "selecionado" else "selecionados"}"
+            toolbar.subtitle = null
+            header.visibility = View.GONE
+            return
         }
-        invalidateOptionsMenu()
+        
+        header.visibility = View.VISIBLE
+        val root = Environment.getExternalStorageDirectory()
+        val dir = currentDir ?: root
+        toolbar.title = if (dir.absolutePath == root.absolutePath) "Armazenamento Interno" else dir.name
+        toolbar.subtitle = null
+
+        val crumbs = findViewById<LinearLayout>(R.id.crumbs)
+        crumbs.removeAllViews()
+        val chain = generateSequence(dir) { it.parentFile }
+            .takeWhile { it.absolutePath.startsWith(root.absolutePath) }.toList().reversed()
+        chain.forEachIndexed { i, f ->
+            if (i > 0) crumbs.addView(TextView(this).apply { text = "›"; setTextColor(0xFF777783.toInt()); setPadding(dp(6), 0, dp(6), 0) })
+            val last = i == chain.lastIndex
+            crumbs.addView(TextView(this).apply {
+                text = if (f.absolutePath == root.absolutePath) "Interno" else f.name
+                setTextColor(if (last) Color.WHITE else 0xFFB8C4FF.toInt())
+                textSize = 13f
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = dp(14).toFloat()
+                    setColor(if (last) 0xFF3D4B8F.toInt() else 0xFF2A2A33.toInt())
+                }
+                setOnClickListener { if (!last) loadFiles(f) }
+            })
+        }
+        findViewById<HorizontalScrollView>(R.id.crumbScroll).post { fullScroll(View.FOCUS_RIGHT) }
+
+        val st = android.os.StatFs(root.path)
+        val used = st.totalBytes - st.availableBytes
+        findViewById<ProgressBar>(R.id.storageBar).progress = (used * 100 / st.totalBytes).toInt()
+        findViewById<TextView>(R.id.storageText).text =
+            "${Formatter.formatShortFileSize(this, used)} usados de ${Formatter.formatShortFileSize(this, st.totalBytes)}"
     }
 
     private fun loadFiles(dir: File) {
@@ -143,19 +164,11 @@ class MainActivity : AppCompatActivity() {
         try {
             val shizukuClass = Class.forName("rikka.shizuku.Shizuku")
             val newProcessMethod = shizukuClass.getDeclaredMethod(
-                "newProcess",
-                Array<String>::class.java,
-                Array<String>::class.java,
-                String::class.java
+                "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java
             )
             newProcessMethod.isAccessible = true
 
-            val process = newProcessMethod.invoke(
-                null,
-                arrayOf("ls", "-a", dir.absolutePath),
-                null,
-                null
-            ) as rikka.shizuku.ShizukuRemoteProcess
+            val process = newProcessMethod.invoke(null, arrayOf("ls", "-a", dir.absolutePath), null, null) as rikka.shizuku.ShizukuRemoteProcess
 
             val reader = process.inputStream.bufferedReader()
             val files = mutableListOf<File>()
@@ -183,91 +196,88 @@ class MainActivity : AppCompatActivity() {
             isSelectionMode = isSelectionMode,
             selectedFiles = selectedFiles,
             onItemClick = { file ->
-                if (file.isDirectory) {
-                    loadFiles(file)
-                } else if (file.name.endsWith(".apk", ignoreCase = true)) {
-                    showApkOptions(file)
-                } else {
-                    Toast.makeText(this, "Abrir: ${file.name}", Toast.LENGTH_SHORT).show()
-                }
+                if (file.isDirectory) loadFiles(file)
+                else if (file.name.endsWith(".apk", ignoreCase = true)) showApkSheet(file)
+                else Toast.makeText(this, "Abrir: ${file.name}", Toast.LENGTH_SHORT).show()
             },
-            onIconClick = { file ->
-                toggleSelection(file)
-            },
+            onIconClick = { file -> toggleSelection(file) },
             onLongClick = { file ->
-                if (!isSelectionMode) {
-                    showContextMenu(file)
-                } else {
-                    toggleSelection(file)
-                }
+                if (!isSelectionMode) showContextMenu(file) else toggleSelection(file)
             }
         )
         recyclerView.adapter = adapter
     }
 
-    // --- POPUP CUSTOMIZADO DO CLAUDE ---
+    // --- BOTTOM SHEET E POPUPS ---
     private data class PopupItem(val title: String, val iconRes: Int, val onClick: () -> Unit)
+    private data class SheetAction(val title: String, val icon: String, val danger: Boolean = false, val run: () -> Unit)
 
     private fun showStyledPopup(anchor: View, items: List<PopupItem>, above: Boolean = false) {
         val root = LayoutInflater.from(this).inflate(R.layout.popup_menu, null)
         val container = root.findViewById<LinearLayout>(R.id.popupItems)
 
-        val popup = PopupWindow(
-            root,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
+        val popup = PopupWindow(root, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             elevation = 16f * resources.displayMetrics.density
-            enterTransition = Fade()
-            exitTransition = Fade()
         }
 
         items.forEach { item ->
             val row = LayoutInflater.from(this).inflate(R.layout.item_popup, container, false)
-            row.findViewById<ImageView>(R.id.itemIcon).setImageResource(item.iconRes)
+            val iv = row.findViewById<ImageView>(R.id.itemIcon)
+            if (item.iconRes == 0) iv.setImageDrawable(pathIcon(Icons.PASTE)) else iv.setImageResource(item.iconRes)
             row.findViewById<TextView>(R.id.itemTitle).text = item.title
             row.setOnClickListener { popup.dismiss(); item.onClick() }
             container.addView(row)
         }
 
         if (above) {
-            root.measure(
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            )
+            root.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
             popup.showAsDropDown(anchor, 0, -(anchor.height + root.measuredHeight), Gravity.END)
         } else {
             popup.showAsDropDown(anchor, 0, 0, Gravity.END)
         }
     }
 
+    private fun showSheet(title: String, subtitle: String, icon: Drawable, actions: List<SheetAction>) {
+        val dialog = BottomSheetDialog(this)
+        val v = layoutInflater.inflate(R.layout.sheet_actions, null)
+        v.findViewById<ImageView>(R.id.sheetIcon).setImageDrawable(icon)
+        v.findViewById<TextView>(R.id.sheetTitle).text = title
+        v.findViewById<TextView>(R.id.sheetSubtitle).text = subtitle
+        val list = v.findViewById<LinearLayout>(R.id.sheetList)
+        actions.forEach { a ->
+            val row = layoutInflater.inflate(R.layout.item_popup, list, false)
+            val ic = row.findViewById<ImageView>(R.id.itemIcon)
+            val tx = row.findViewById<TextView>(R.id.itemTitle)
+            ic.setImageDrawable(pathIcon(a.icon)); tx.text = a.title
+            if (a.danger) {
+                ic.imageTintList = android.content.res.ColorStateList.valueOf(0xFFFF6B6B.toInt()); tx.setTextColor(0xFFFF6B6B.toInt())
+            }
+            row.setOnClickListener { dialog.dismiss(); a.run() }
+            list.addView(row)
+        }
+        dialog.setContentView(v)
+        (v.parent as View).setBackgroundColor(Color.TRANSPARENT)
+        dialog.show()
+    }
+
     private fun showFabMenu(anchorView: View) {
-        showStyledPopup(
-            anchorView,
-            listOf(
-                PopupItem("Nova pasta", R.drawable.ic_create_new_folder) { showCreateDialog(true) },
-                PopupItem("Novo arquivo", R.drawable.ic_note_add) { showCreateDialog(false) }
-            ),
-            above = true
+        val items = mutableListOf(
+            PopupItem("Nova pasta", R.drawable.ic_create_new_folder) { showCreateDialog(true) },
+            PopupItem("Novo arquivo", R.drawable.ic_note_add) { showCreateDialog(false) }
         )
+        if (clipboard.isNotEmpty()) items.add(0, PopupItem("Colar aqui", 0) { paste() })
+        showStyledPopup(anchorView, items, above = true)
     }
 
     private fun showOptionsMenu(anchorView: View) {
         showStyledPopup(
             anchorView,
             listOf(
-                PopupItem(
-                    if (showHiddenFiles) "Ocultar arquivos ocultos" else "Mostrar ocultos",
-                    R.drawable.ic_visibility
-                ) {
-                    showHiddenFiles = !showHiddenFiles
-                    currentDir?.let { loadFiles(it) }
+                PopupItem(if (showHiddenFiles) "Ocultar ocultos" else "Mostrar ocultos", R.drawable.ic_visibility) {
+                    showHiddenFiles = !showHiddenFiles; currentDir?.let { loadFiles(it) }
                 },
-                PopupItem("Terminal", R.drawable.ic_terminal) {
-                    Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show()
-                }
+                PopupItem("Terminal", R.drawable.ic_terminal) { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show() }
             )
         )
     }
@@ -278,128 +288,211 @@ class MainActivity : AppCompatActivity() {
         val input = view.findViewById<TextInputEditText>(R.id.inputName)
 
         inputLayout.hint = if (isFolder) "Nome da pasta" else "Nome do arquivo"
-        inputLayout.setStartIconDrawable(
-            if (isFolder) R.drawable.ic_create_new_folder else R.drawable.ic_note_add
-        )
+        inputLayout.setStartIconDrawable(if (isFolder) R.drawable.ic_create_new_folder else R.drawable.ic_note_add)
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.RoundedDialog)
             .setTitle(if (isFolder) "Nova pasta" else "Novo arquivo")
-            .setView(view)
-            .setPositiveButton("Criar", null)
-            .setNegativeButton("Cancelar", null)
-            .create()
+            .setView(view).setPositiveButton("Criar", null).setNegativeButton("Cancelar", null).create()
 
         dialog.setOnShowListener {
             input.requestFocus()
             dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
-
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val name = input.text.toString().trim()
                 val newFile = File(currentDir, name)
                 when {
                     name.isEmpty() -> inputLayout.error = "Digite um nome"
-                    newFile.exists() -> inputLayout.error = "Já existe com esse nome"
+                    newFile.exists() -> inputLayout.error = "Já existe"
                     else -> try {
                         if (isFolder) newFile.mkdirs() else newFile.createNewFile()
-                        loadFiles(currentDir!!)
-                        dialog.dismiss()
-                    } catch (e: Exception) {
-                        inputLayout.error = "Erro: ${e.message}"
-                    }
+                        loadFiles(currentDir!!); dialog.dismiss()
+                    } catch (e: Exception) { inputLayout.error = "Erro: ${e.message}" }
                 }
             }
         }
         dialog.show()
     }
 
-    // --- Lógica de Contexto ---
-    private fun showContextMenu(file: File) {
-        val options = arrayOf("Copiar", "Mover", "Renomear", "Excluir", "Informações")
-        MaterialAlertDialogBuilder(this)
-            .setTitle(file.name)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> Toast.makeText(this, "Copiar em breve", Toast.LENGTH_SHORT).show()
-                    1 -> Toast.makeText(this, "Mover em breve", Toast.LENGTH_SHORT).show()
-                    2 -> renameFile(file)
-                    3 -> deleteFile(file)
-                    4 -> showFileInfo(file)
-                }
-            }
-            .show()
-    }
-
-    private fun showApkOptions(file: File) {
-        val options = arrayOf("Instalar", "Visualizar Conteúdo", "Informações")
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Este arquivo é um pacote do Android.\nDeseja instalá-lo ou visualizar seu conteúdo?")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> installApk(file)
-                    1 -> Toast.makeText(this, "Visualizador em breve", Toast.LENGTH_SHORT).show()
-                    2 -> showFileInfo(file)
-                }
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
+    // --- AÇÕES DE APK E CONTEXTO ---
+    private fun showApkSheet(file: File) {
+        val pm = packageManager
+        val info = pm.getPackageArchiveInfo(file.absolutePath, 0)
+        val app = info?.applicationInfo
+        var icon: Drawable = ColorDrawable(Color.TRANSPARENT)
+        var title = file.name
+        var sub = Formatter.formatShortFileSize(this, file.length())
+        if (app != null) {
+            app.sourceDir = file.absolutePath; app.publicSourceDir = file.absolutePath
+            icon = app.loadIcon(pm); title = app.loadLabel(pm).toString()
+            sub = "${info.packageName}\nVersão ${info.versionName} • $sub"
+        }
+        showSheet(title, sub, icon, listOf(
+            SheetAction("Instalar", Icons.CHECK) { installApk(file) },
+            SheetAction("Visualizar conteúdo", Icons.ZIP) { showZipContent(file) },
+            SheetAction("Informações", Icons.INFO) { showInfoDialog(file) }
+        ))
     }
 
     private fun installApk(file: File) {
         try {
             val intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(
-                FileProvider.getUriForFile(this, "$packageName.provider", file),
-                "application/vnd.android.package-archive"
-            )
+            intent.setDataAndType(FileProvider.getUriForFile(this, "$packageName.provider", file), "application/vnd.android.package-archive")
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             startActivity(intent)
-        } catch (e: Exception) {
-            Toast.makeText(this, "Erro ao instalar: ${e.message}", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) { Toast.makeText(this, "Erro: ${e.message}", Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun showZipContent(file: File) {
+        val names = try { java.util.zip.ZipFile(file).use { z -> z.entries().toList().map { it.name } } }
+                    catch (e: Exception) { listOf("Erro: ${e.message}") }
+        MaterialAlertDialogBuilder(this, R.style.RoundedDialog)
+            .setTitle("${names.size} itens").setItems(names.take(500).toTypedArray(), null)
+            .setPositiveButton("Fechar", null).show()
+    }
+
+    private fun showContextMenu(file: File) {
+        val actions = mutableListOf(
+            SheetAction("Selecionar", Icons.CHECK) { toggleSelection(file) },
+            SheetAction("Copiar", Icons.COPY) { clipboard = listOf(file); clipboardCut = false; toastPaste() },
+            SheetAction("Mover", Icons.MOVE) { clipboard = listOf(file); clipboardCut = true; toastPaste() },
+            SheetAction("Renomear", Icons.EDIT) { showRenameDialog(file) },
+            SheetAction("Compactar (.zip)", Icons.ZIP) { zipFiles(listOf(file)) }
+        )
+        if (file.extension.equals("zip", true) || file.extension.equals("apk", true))
+            actions.add(SheetAction("Descompactar aqui", Icons.UNZIP) { unzip(file) })
+        actions.add(SheetAction("Informações", Icons.INFO) { showInfoDialog(file) })
+        actions.add(SheetAction("Excluir", Icons.DELETE, danger = true) { confirmDelete(listOf(file)) })
+
+        val sub = if (file.isDirectory) "Pasta" else Formatter.formatShortFileSize(this, file.length())
+        showSheet(file.name, sub, pathIcon(if (file.isDirectory) Icons.MOVE else Icons.INFO).apply {
+            setTint(0xFFB8C4FF.toInt()) }, actions)
+    }
+
+    private fun toastPaste() = Toast.makeText(this, "Abra a pasta destino e toque em + > Colar aqui", Toast.LENGTH_LONG).show()
+
+    private fun runBg(work: () -> Unit) {
+        Thread {
+            try { work(); runOnUiThread { currentDir?.let { loadFiles(it) } } }
+            catch (e: Exception) { runOnUiThread { Toast.makeText(this, "Erro: ${e.message}", Toast.LENGTH_LONG).show() } }
+        }.start()
+    }
+
+    private fun paste() {
+        val dest = currentDir ?: return
+        runBg {
+            clipboard.forEach { src ->
+                var target = File(dest, src.name)
+                if (target.exists()) {
+                    val ext = if (src.extension.isEmpty()) "" else ".${src.extension}"
+                    target = File(dest, "${src.nameWithoutExtension}_copia$ext")
+                }
+                if (clipboardCut) {
+                    if (!src.renameTo(target)) { src.copyRecursively(target); src.deleteRecursively() }
+                } else src.copyRecursively(target)
+            }
+            if (clipboardCut) clipboard = emptyList()
         }
+    }
+
+    private fun confirmDelete(files: List<File>) {
+        MaterialAlertDialogBuilder(this, R.style.RoundedDialog)
+            .setTitle("Excluir ${files.size} item(ns)?")
+            .setMessage(files.joinToString("\n") { it.name }.take(300))
+            .setPositiveButton("Excluir") { _, _ -> runBg { files.forEach { it.deleteRecursively() } } }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun showRenameDialog(file: File) {
+        val view = layoutInflater.inflate(R.layout.dialog_create, null)
+        val layout = view.findViewById<TextInputLayout>(R.id.inputLayout)
+        val input = view.findViewById<TextInputEditText>(R.id.inputName)
+        layout.hint = "Novo nome"; input.setText(file.name)
+        val d = MaterialAlertDialogBuilder(this, R.style.RoundedDialog)
+            .setTitle("Renomear").setView(view).setPositiveButton("Renomear", null).setNegativeButton("Cancelar", null).create()
+        d.setOnShowListener {
+            d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val n = input.text.toString().trim()
+                val target = File(file.parentFile, n)
+                when {
+                    n.isEmpty() -> layout.error = "Digite um nome"
+                    target.exists() -> layout.error = "Já existe"
+                    file.renameTo(target) -> { d.dismiss(); currentDir?.let { loadFiles(it) } }
+                    else -> layout.error = "Erro ao renomear"
+                }
+            }
+        }
+        d.show()
+    }
+
+    private fun zipFiles(files: List<File>) {
+        val dir = currentDir ?: return
+        val out = File(dir, (if (files.size == 1) files[0].nameWithoutExtension else "arquivos") + ".zip")
+        runBg {
+            java.util.zip.ZipOutputStream(out.outputStream().buffered()).use { zos ->
+                fun add(f: File, base: String) {
+                    if (f == out) return
+                    if (f.isDirectory) f.listFiles()?.forEach { add(it, "$base${f.name}/") }
+                    else {
+                        zos.putNextEntry(java.util.zip.ZipEntry(base + f.name))
+                        f.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                }
+                files.forEach { add(it, "") }
+            }
+        }
+    }
+
+    private fun unzip(zip: File) {
+        val dest = File(zip.parentFile, zip.nameWithoutExtension)
+        runBg {
+            dest.mkdirs()
+            java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zis ->
+                var e = zis.nextEntry
+                while (e != null) {
+                    val out = File(dest, e.name)
+                    if (!out.canonicalPath.startsWith(dest.canonicalPath)) throw SecurityException("Entrada inválida")
+                    if (e.isDirectory) out.mkdirs() else {
+                        out.parentFile?.mkdirs(); out.outputStream().use { zis.copyTo(it) }
+                    }
+                    zis.closeEntry(); e = zis.nextEntry
+                }
+            }
+        }
+    }
+
+    private fun showInfoDialog(file: File) {
+        val size = if (file.isDirectory) file.walkTopDown().filter { it.isFile }.sumOf { it.length() } else file.length()
+        val date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(file.lastModified())
+        MaterialAlertDialogBuilder(this, R.style.RoundedDialog)
+            .setTitle(file.name)
+            .setMessage("Caminho:\n${file.absolutePath}\n\nTamanho: ${Formatter.formatShortFileSize(this, size)}\nModificado: $date")
+            .setPositiveButton("Fechar", null).show()
     }
 
     private fun toggleSelection(file: File) {
         if (!isSelectionMode) isSelectionMode = true
-        
         if (selectedFiles.contains(file)) selectedFiles.remove(file) else selectedFiles.add(file)
-
-        if (selectedFiles.isEmpty()) clearSelection() else {
-            updateToolbar()
-            setupAdapter(allFiles)
-        }
+        if (selectedFiles.isEmpty()) clearSelection() else { updateToolbar(); setupAdapter(allFiles) }
     }
 
     private fun clearSelection() {
-        isSelectionMode = false
-        selectedFiles.clear()
+        isSelectionMode = false; selectedFiles.clear()
         if (currentDir != null) setupAdapter(allFiles)
         updateToolbar()
     }
 
-    // --- Busca ---
     private fun activateSearch() {
         if (isSearching) { closeSearch(); return }
-
         isSearching = true
         supportActionBar?.setDisplayShowTitleEnabled(false)
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
         
         val searchView = EditText(this).apply {
-            hint = "Pesquisar..."
-            setTextColor(android.graphics.Color.WHITE)
-            setHintTextColor(android.graphics.Color.GRAY)
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            setSingleLine()
-            setPadding(0, 0, 0, 0)
+            hint = "Pesquisar..."; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setBackgroundColor(Color.TRANSPARENT); setSingleLine()
         }
-        
-        val layoutParams = Toolbar.LayoutParams(
-            Toolbar.LayoutParams.MATCH_PARENT,
-            Toolbar.LayoutParams.WRAP_CONTENT,
-            Gravity.START or Gravity.CENTER_VERTICAL
-        )
-        layoutParams.rightMargin = 100
-        searchView.layoutParams = layoutParams
+        val layoutParams = Toolbar.LayoutParams(Toolbar.LayoutParams.MATCH_PARENT, Toolbar.LayoutParams.WRAP_CONTENT, Gravity.START or Gravity.CENTER_VERTICAL)
+        layoutParams.rightMargin = 100; searchView.layoutParams = layoutParams
 
         supportActionBar?.setDisplayShowCustomEnabled(true)
         supportActionBar?.customView = searchView
@@ -408,8 +501,7 @@ class MainActivity : AppCompatActivity() {
         searchView.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
                 val query = s.toString().lowercase()
-                val filtered = allFiles.filter { it.name.lowercase().contains(query) }
-                setupAdapter(filtered)
+                setupAdapter(allFiles.filter { it.name.lowercase().contains(query) })
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -426,53 +518,11 @@ class MainActivity : AppCompatActivity() {
         updateToolbar()
     }
 
-    private fun renameFile(file: File) {
-        val input = EditText(this)
-        input.setText(file.name)
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Renomear")
-            .setView(input)
-            .setPositiveButton("Salvar") { _, _ ->
-                val newName = input.text.toString()
-                val newFile = File(file.parentFile, newName)
-                if (file.renameTo(newFile)) {
-                    Toast.makeText(this, "Renomeado!", Toast.LENGTH_SHORT).show()
-                    loadFiles(currentDir!!)
-                } else Toast.makeText(this, "Erro ao renomear", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
-
-    private fun deleteFile(file: File) {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Excluir")
-            .setMessage("Tem certeza que deseja excluir '${file.name}'?")
-            .setPositiveButton("Excluir") { _, _ ->
-                if (file.deleteRecursively()) {
-                    Toast.makeText(this, "Excluído!", Toast.LENGTH_SHORT).show()
-                    loadFiles(currentDir!!)
-                } else Toast.makeText(this, "Erro ao excluir", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
-
-    private fun showFileInfo(file: File) {
-        val size = android.text.format.Formatter.formatShortFileSize(this, file.length())
-        val date = android.text.format.DateFormat.format("dd/MM/yyyy HH:mm", java.util.Date(file.lastModified()))
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Informações")
-            .setMessage("Nome: ${file.name}\nTamanho: $size\nData: $date\nCaminho: ${file.absolutePath}")
-            .setPositiveButton("OK", null)
-            .show()
-    }
-
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.clear()
         if (isSelectionMode) {
-            menu.add(0, 10, 0, "Copiar").setIcon(android.R.drawable.ic_menu_crop).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            menu.add(0, 11, 0, "Excluir").setIcon(android.R.drawable.ic_menu_delete).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(0, 10, 0, "Copiar").setIcon(pathIcon(Icons.COPY)).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(0, 11, 0, "Excluir").setIcon(pathIcon(Icons.DELETE)).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         } else {
             val searchIcon = if (isSearching) android.R.drawable.ic_menu_close_clear_cancel else R.drawable.ic_search
             menu.add(0, 1, 0, "Lupa").setIcon(searchIcon).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
@@ -484,42 +534,21 @@ class MainActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             1 -> activateSearch()
-            R.id.menu_more -> {
-                val anchor = findViewById<View>(R.id.menu_more) ?: toolbar
-                showOptionsMenu(anchor)
-            }
-            10 -> { Toast.makeText(this, "Copiar ${selectedFiles.size} itens", Toast.LENGTH_SHORT).show(); true }
-            11 -> { deleteSelectedFiles(); true }
+            R.id.menu_more -> showOptionsMenu(findViewById(R.id.menu_more) ?: toolbar)
+            10 -> { clipboard = selectedFiles.toList(); clipboardCut = false; clearSelection(); toastPaste() }
+            11 -> { val l = selectedFiles.toList(); clearSelection(); confirmDelete(l) }
             android.R.id.home -> {
-                if (isSelectionMode) clearSelection()
-                else currentDir?.parentFile?.let { loadFiles(it) }
+                if (isSelectionMode) clearSelection() else currentDir?.parentFile?.let { loadFiles(it) }
                 return true
             }
         }
         return super.onOptionsItemSelected(item)
     }
 
-    private fun deleteSelectedFiles() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Excluir")
-            .setMessage("Excluir ${selectedFiles.size} itens?")
-            .setPositiveButton("Excluir") { _, _ ->
-                var sucesso = 0
-                selectedFiles.forEach { if (it.deleteRecursively()) sucesso++ }
-                Toast.makeText(this, "$sucesso itens excluídos", Toast.LENGTH_SHORT).show()
-                clearSelection()
-                loadFiles(currentDir!!)
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
-
     private fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                intent.data = Uri.parse("package:$packageName")
-                startActivity(intent)
+                startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply { data = Uri.parse("package:$packageName") })
             } else {
                 loadFiles(Environment.getExternalStorageDirectory())
                 if (rikka.shizuku.Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
@@ -529,18 +558,14 @@ class MainActivity : AppCompatActivity() {
         } else {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
-            } else {
-                loadFiles(Environment.getExternalStorageDirectory())
-            }
+            } else loadFiles(Environment.getExternalStorageDirectory())
         }
     }
 
     override fun onResume() {
         super.onResume()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (Environment.isExternalStorageManager() && currentDir == null) {
-                loadFiles(Environment.getExternalStorageDirectory())
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager() && currentDir == null) {
+            loadFiles(Environment.getExternalStorageDirectory())
         }
     }
 }
