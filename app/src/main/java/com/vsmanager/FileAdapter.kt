@@ -10,7 +10,7 @@ import java.io.File
 
 class FileAdapter(
     private val files: List<File>,
-    private val onItemClick: (File) -> Unit // Adicionado callback de clique
+    private val onItemClick: (File) -> Unit
 ) : RecyclerView.Adapter<FileAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -29,7 +29,6 @@ class FileAdapter(
         holder.name.text = file.name
         holder.icon.setImageResource(R.drawable.ic_folder)
 
-        // Ação de clicar
         holder.itemView.setOnClickListener {
             onItemClick(file)
         }
