@@ -16,9 +16,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:title="VSManager"
             app:titleTextColor="#FFFFFF"
-            app:subtitle="/storage/emulated/0"
             app:subtitleTextColor="#888888" />
     </com.google.android.material.appbar.AppBarLayout>
 

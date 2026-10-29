@@ -14,7 +14,7 @@
         android:layout_height="40dp"
         android:src="@drawable/ic_folder"
         android:layout_marginEnd="16dp"
-        app:tint="#D3D3D3" /> <!-- Cor cinza claro igual print 3 -->
+        app:tint="#D3D3D3" />
 
     <LinearLayout
         android:layout_width="match_parent"

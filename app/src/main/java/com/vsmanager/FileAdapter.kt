@@ -41,7 +41,6 @@ class FileAdapter(
             holder.subtitle.text = "$size • $date"
         }
 
-        // Ações
         holder.itemView.setOnClickListener { onClick(file) }
         holder.itemView.setOnLongClickListener { 
             onLongClick(file)

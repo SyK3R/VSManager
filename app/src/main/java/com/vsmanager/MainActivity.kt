@@ -10,12 +10,12 @@ import android.os.Environment
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
 import android.widget.PopupMenu
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -45,8 +45,6 @@ class MainActivity : AppCompatActivity() {
 
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
-        
-        // Remove o título padrão para usarmos o nosso
         supportActionBar?.setDisplayShowTitleEnabled(false)
 
         recyclerView = findViewById(R.id.recyclerView)
@@ -55,16 +53,11 @@ class MainActivity : AppCompatActivity() {
 
         fabContainer.setOnClickListener { showFabMenu(it) }
 
-        // Lógica do botão de voltar do celular
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (isSearching) {
-                    isSearching = false
-                    supportActionBar?.setDisplayShowCustomEnabled(false)
-                    supportActionBar?.setDisplayShowTitleEnabled(false)
-                    invalidateOptionsMenu()
-                    loadFiles(currentDir!!)
-                } else if (currentDir != null && currentDir!!.absolutePath != "/") {
+                    closeSearch()
+                } else if (currentDir != null && currentDir!!.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
                     val parent = currentDir!!.parentFile
                     if (parent != null) loadFiles(parent) else finish()
                 } else {
@@ -76,9 +69,23 @@ class MainActivity : AppCompatActivity() {
         checkPermissions()
     }
 
+    private fun updateToolbar() {
+        if (isSearching) return // Se estiver pesquisando, não mexe no cabeçalho normal
+
+        if (currentDir?.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
+            supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            supportActionBar?.setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
+        } else {
+            supportActionBar?.setDisplayHomeAsUpEnabled(false)
+        }
+        toolbar.title = "VSManager"
+        toolbar.subtitle = currentDir?.absolutePath ?: ""
+    }
+
     private fun loadFiles(dir: File) {
         currentDir = dir
-        toolbar.subtitle = dir.absolutePath
+        closeSearch(false) // Fecha a busca se estiver aberta
+        updateToolbar()
         isSearching = false
 
         val isRestricted = dir.absolutePath.contains("/Android/data") || dir.absolutePath.contains("/Android/obb")
@@ -153,53 +160,27 @@ class MainActivity : AppCompatActivity() {
         recyclerView.adapter = adapter
     }
 
-    // --- Lógica do Menu de Contexto (Segurar o dedo) ---
-    private fun showContextMenu(file: File) {
-        val options = arrayOf("Copiar", "Mover", "Renomear", "Excluir", "Informações")
-        MaterialAlertDialogBuilder(this)
-            .setTitle(file.name)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> Toast.makeText(this, "Copiar em breve", Toast.LENGTH_SHORT).show()
-                    1 -> Toast.makeText(this, "Mover em breve", Toast.LENGTH_SHORT).show()
-                    2 -> Toast.makeText(this, "Renomear em breve", Toast.LENGTH_SHORT).show()
-                    3 -> Toast.makeText(this, "Excluir em breve", Toast.LENGTH_SHORT).show()
-                    4 -> Toast.makeText(this, "Informações em breve", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .show()
-    }
-
-    // --- Menus ---
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.clear()
-        menu.add(0, 1, 0, "Lupa").setIcon(R.drawable.ic_search).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        menu.add(0, 2, 1, "Opções").setIcon(R.drawable.ic_more_vert).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            1 -> activateSearch()
-            2 -> {
-                // Ancora no botão de 3 pontinhos (o próprio toolbar)
-                showOptionsMenu(toolbar)
-            }
-        }
-        return super.onOptionsItemSelected(item)
-    }
-
+    // --- Lógica de Pesquisa ---
     private fun activateSearch() {
+        if (isSearching) {
+            closeSearch()
+            return
+        }
+
         isSearching = true
+        // Esconde o título e subtítulo
+        supportActionBar?.setDisplayShowTitleEnabled(false)
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
+        
         val searchView = EditText(this).apply {
             hint = "Pesquisar..."
             setTextColor(android.graphics.Color.WHITE)
             setHintTextColor(android.graphics.Color.GRAY)
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setSingleLine()
         }
         searchEditText = searchView
         
-        supportActionBar?.setDisplayShowTitleEnabled(false)
         supportActionBar?.setDisplayShowCustomEnabled(true)
         supportActionBar?.customView = searchView
         invalidateOptionsMenu()
@@ -216,8 +197,109 @@ class MainActivity : AppCompatActivity() {
         searchView.requestFocus()
     }
 
+    private fun closeSearch(reload: Boolean = true) {
+        isSearching = false
+        supportActionBar?.setDisplayShowCustomEnabled(false)
+        supportActionBar?.setDisplayShowTitleEnabled(false)
+        invalidateOptionsMenu()
+        
+        if (reload && currentDir != null) {
+            loadFilesNormally(currentDir!!) // Recarrega a lista original
+        }
+        updateToolbar()
+    }
+
+    // --- Menu de Contexto ---
+    private fun showContextMenu(file: File) {
+        val options = arrayOf("Copiar", "Mover", "Renomear", "Excluir", "Informações")
+        MaterialAlertDialogBuilder(this)
+            .setTitle(file.name)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> Toast.makeText(this, "Copiar em breve", Toast.LENGTH_SHORT).show()
+                    1 -> Toast.makeText(this, "Mover em breve", Toast.LENGTH_SHORT).show()
+                    2 -> renameFile(file)
+                    3 -> deleteFile(file)
+                    4 -> showFileInfo(file)
+                }
+            }
+            .show()
+    }
+
+    private fun renameFile(file: File) {
+        val input = EditText(this)
+        input.setText(file.name)
+        
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Renomear")
+            .setView(input)
+            .setPositiveButton("Salvar") { _, _ ->
+                val newName = input.text.toString()
+                val newFile = File(file.parentFile, newName)
+                if (file.renameTo(newFile)) {
+                    Toast.makeText(this, "Renomeado!", Toast.LENGTH_SHORT).show()
+                    loadFiles(currentDir!!)
+                } else {
+                    Toast.makeText(this, "Erro ao renomear", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun deleteFile(file: File) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Excluir")
+            .setMessage("Tem certeza que deseja excluir '${file.name}'?")
+            .setPositiveButton("Excluir") { _, _ ->
+                if (file.deleteRecursively()) {
+                    Toast.makeText(this, "Excluído!", Toast.LENGTH_SHORT).show()
+                    loadFiles(currentDir!!)
+                } else {
+                    Toast.makeText(this, "Erro ao excluir", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showFileInfo(file: File) {
+        val size = android.text.format.Formatter.formatShortFileSize(this, file.length())
+        val date = android.text.format.DateFormat.format("dd/MM/yyyy HH:mm", java.util.Date(file.lastModified()))
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Informações")
+            .setMessage("Nome: ${file.name}\nTamanho: $size\nData: $date\nCaminho: ${file.absolutePath}")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    // --- Menus ---
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.clear()
+        // Muda o ícone da lupa para X se estiver pesquisando
+        val searchIcon = if (isSearching) android.R.drawable.ic_menu_close_clear_cancel else R.drawable.ic_search
+        menu.add(0, 1, 0, "Lupa").setIcon(searchIcon).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        menu.add(0, R.id.menu_more, 1, "Opções").setIcon(R.drawable.ic_more_vert).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            1 -> activateSearch()
+            R.id.menu_more -> {
+                val anchor = findViewById<View>(R.id.menu_more) ?: toolbar
+                showOptionsMenu(anchor)
+            }
+            android.R.id.home -> {
+                currentDir?.parentFile?.let { loadFiles(it) }
+                return true
+            }
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
     private fun showOptionsMenu(anchorView: View) {
-        val popup = PopupMenu(this, anchorView)
+        val popup = PopupMenu(this, anchorView, Gravity.END)
         popup.menu.add("Mostrar ocultos")
         popup.menu.add("Multiseleção")
         popup.menu.add("Terminal")
