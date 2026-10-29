@@ -22,6 +22,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -37,7 +38,9 @@ class MainActivity : AppCompatActivity() {
     private var showHiddenFiles = false
     private var isSearching = false
     private var allFiles: List<File> = emptyList()
-    private var searchEditText: EditText? = null
+    
+    private var isSelectionMode = false
+    private val selectedFiles = mutableSetOf<File>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,6 +60,8 @@ class MainActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 if (isSearching) {
                     closeSearch()
+                } else if (isSelectionMode) {
+                    clearSelection()
                 } else if (currentDir != null && currentDir!!.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
                     val parent = currentDir!!.parentFile
                     if (parent != null) loadFiles(parent) else finish()
@@ -70,23 +75,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateToolbar() {
-        if (isSearching) return // Se estiver pesquisando, não mexe no cabeçalho normal
+        if (isSearching) return
 
-        if (currentDir?.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
+        if (isSelectionMode) {
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
-            supportActionBar?.setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
+            supportActionBar?.setHomeAsUpIndicator(android.R.drawable.ic_menu_close_clear_cancel)
+            toolbar.title = "${selectedFiles.size}"
+            toolbar.subtitle = "Selecionados"
         } else {
-            supportActionBar?.setDisplayHomeAsUpEnabled(false)
+            if (currentDir?.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
+                supportActionBar?.setDisplayHomeAsUpEnabled(true)
+                supportActionBar?.setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
+            } else {
+                supportActionBar?.setDisplayHomeAsUpEnabled(false)
+            }
+            toolbar.title = "VSManager"
+            toolbar.subtitle = currentDir?.absolutePath ?: ""
         }
-        toolbar.title = "VSManager"
-        toolbar.subtitle = currentDir?.absolutePath ?: ""
+        invalidateOptionsMenu()
     }
 
     private fun loadFiles(dir: File) {
         currentDir = dir
-        closeSearch(false) // Fecha a busca se estiver aberta
+        clearSelection()
+        closeSearch(false)
         updateToolbar()
-        isSearching = false
 
         val isRestricted = dir.absolutePath.contains("/Android/data") || dir.absolutePath.contains("/Android/obb")
         
@@ -145,30 +158,87 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupAdapter(files: List<File>) {
-        adapter = FileAdapter(files, 
-            onClick = { file ->
+        adapter = FileAdapter(
+            files = files,
+            isSelectionMode = isSelectionMode,
+            selectedFiles = selectedFiles,
+            onItemClick = { file ->
                 if (file.isDirectory) {
                     loadFiles(file)
+                } else if (file.name.endsWith(".apk", ignoreCase = true)) {
+                    showApkOptions(file) // Abre o diálogo bonito para APK
                 } else {
-                    Toast.makeText(this, "Arquivo: ${file.name}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Abrir: ${file.name}", Toast.LENGTH_SHORT).show()
                 }
             },
+            onIconClick = { file ->
+                toggleSelection(file)
+            },
             onLongClick = { file ->
-                showContextMenu(file)
+                if (!isSelectionMode) {
+                    isSelectionMode = true
+                    selectedFiles.add(file)
+                    updateToolbar()
+                    setupAdapter(allFiles)
+                }
             }
         )
         recyclerView.adapter = adapter
     }
 
-    // --- Lógica de Pesquisa ---
-    private fun activateSearch() {
-        if (isSearching) {
-            closeSearch()
-            return
+    // --- Lógica do APK (Imagem 2 e 3) ---
+    private fun showApkOptions(file: File) {
+        val options = arrayOf("Instalar", "Visualizar Conteúdo", "Informações")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Este arquivo é um pacote do Android.\nDeseja instalá-lo ou visualizar seu conteúdo?")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> installApk(file)
+                    1 -> Toast.makeText(this, "Visualizador em breve", Toast.LENGTH_SHORT).show()
+                    2 -> showFileInfo(file)
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun installApk(file: File) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(
+                FileProvider.getUriForFile(this, "$packageName.provider", file),
+                "application/vnd.android.package-archive"
+            )
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao instalar: ${e.message}", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun toggleSelection(file: File) {
+        if (!isSelectionMode) isSelectionMode = true
+        
+        if (selectedFiles.contains(file)) selectedFiles.remove(file) else selectedFiles.add(file)
+
+        if (selectedFiles.isEmpty()) clearSelection() else {
+            updateToolbar()
+            setupAdapter(allFiles)
+        }
+    }
+
+    private fun clearSelection() {
+        isSelectionMode = false
+        selectedFiles.clear()
+        if (currentDir != null) setupAdapter(allFiles)
+        updateToolbar()
+    }
+
+    // --- Lupa ---
+    private fun activateSearch() {
+        if (isSearching) { closeSearch(); return }
 
         isSearching = true
-        // Esconde o título e subtítulo
         supportActionBar?.setDisplayShowTitleEnabled(false)
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
         
@@ -178,9 +248,17 @@ class MainActivity : AppCompatActivity() {
             setHintTextColor(android.graphics.Color.GRAY)
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             setSingleLine()
+            setPadding(0, 0, 0, 0)
         }
-        searchEditText = searchView
         
+        val layoutParams = Toolbar.LayoutParams(
+            Toolbar.LayoutParams.MATCH_PARENT,
+            Toolbar.LayoutParams.WRAP_CONTENT,
+            Gravity.START or Gravity.CENTER_VERTICAL
+        )
+        layoutParams.rightMargin = 100
+        searchView.layoutParams = layoutParams
+
         supportActionBar?.setDisplayShowCustomEnabled(true)
         supportActionBar?.customView = searchView
         invalidateOptionsMenu()
@@ -202,10 +280,7 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.setDisplayShowCustomEnabled(false)
         supportActionBar?.setDisplayShowTitleEnabled(false)
         invalidateOptionsMenu()
-        
-        if (reload && currentDir != null) {
-            loadFilesNormally(currentDir!!) // Recarrega a lista original
-        }
+        if (reload && currentDir != null) loadFilesNormally(currentDir!!)
         updateToolbar()
     }
 
@@ -229,7 +304,6 @@ class MainActivity : AppCompatActivity() {
     private fun renameFile(file: File) {
         val input = EditText(this)
         input.setText(file.name)
-        
         MaterialAlertDialogBuilder(this)
             .setTitle("Renomear")
             .setView(input)
@@ -239,9 +313,7 @@ class MainActivity : AppCompatActivity() {
                 if (file.renameTo(newFile)) {
                     Toast.makeText(this, "Renomeado!", Toast.LENGTH_SHORT).show()
                     loadFiles(currentDir!!)
-                } else {
-                    Toast.makeText(this, "Erro ao renomear", Toast.LENGTH_SHORT).show()
-                }
+                } else Toast.makeText(this, "Erro ao renomear", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancelar", null)
             .show()
@@ -255,9 +327,7 @@ class MainActivity : AppCompatActivity() {
                 if (file.deleteRecursively()) {
                     Toast.makeText(this, "Excluído!", Toast.LENGTH_SHORT).show()
                     loadFiles(currentDir!!)
-                } else {
-                    Toast.makeText(this, "Erro ao excluir", Toast.LENGTH_SHORT).show()
-                }
+                } else Toast.makeText(this, "Erro ao excluir", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancelar", null)
             .show()
@@ -276,10 +346,14 @@ class MainActivity : AppCompatActivity() {
     // --- Menus ---
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.clear()
-        // Muda o ícone da lupa para X se estiver pesquisando
-        val searchIcon = if (isSearching) android.R.drawable.ic_menu_close_clear_cancel else R.drawable.ic_search
-        menu.add(0, 1, 0, "Lupa").setIcon(searchIcon).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        menu.add(0, R.id.menu_more, 1, "Opções").setIcon(R.drawable.ic_more_vert).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        if (isSelectionMode) {
+            menu.add(0, 10, 0, "Copiar").setIcon(android.R.drawable.ic_menu_crop).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(0, 11, 0, "Excluir").setIcon(android.R.drawable.ic_menu_delete).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        } else {
+            val searchIcon = if (isSearching) android.R.drawable.ic_menu_close_clear_cancel else R.drawable.ic_search
+            menu.add(0, 1, 0, "Lupa").setIcon(searchIcon).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(0, R.id.menu_more, 1, "Opções").setIcon(R.drawable.ic_more_vert).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
         return true
     }
 
@@ -290,18 +364,35 @@ class MainActivity : AppCompatActivity() {
                 val anchor = findViewById<View>(R.id.menu_more) ?: toolbar
                 showOptionsMenu(anchor)
             }
+            10 -> { Toast.makeText(this, "Copiar ${selectedFiles.size} itens", Toast.LENGTH_SHORT).show(); true }
+            11 -> { deleteSelectedFiles(); true }
             android.R.id.home -> {
-                currentDir?.parentFile?.let { loadFiles(it) }
+                if (isSelectionMode) clearSelection()
+                else currentDir?.parentFile?.let { loadFiles(it) }
                 return true
             }
         }
         return super.onOptionsItemSelected(item)
     }
 
+    private fun deleteSelectedFiles() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Excluir")
+            .setMessage("Excluir ${selectedFiles.size} itens?")
+            .setPositiveButton("Excluir") { _, _ ->
+                var sucesso = 0
+                selectedFiles.forEach { if (it.deleteRecursively()) sucesso++ }
+                Toast.makeText(this, "$sucesso itens excluídos", Toast.LENGTH_SHORT).show()
+                clearSelection()
+                loadFiles(currentDir!!)
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
     private fun showOptionsMenu(anchorView: View) {
         val popup = PopupMenu(this, anchorView, Gravity.END)
         popup.menu.add("Mostrar ocultos")
-        popup.menu.add("Multiseleção")
         popup.menu.add("Terminal")
         
         popup.setOnMenuItemClickListener { item ->
@@ -311,7 +402,6 @@ class MainActivity : AppCompatActivity() {
                     currentDir?.let { loadFiles(it) }
                     true
                 }
-                "Multiseleção" -> { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show(); true }
                 "Terminal" -> { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show(); true }
                 else -> false
             }
