@@ -8,7 +8,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
-import android.text.format.Formatter
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -24,7 +23,6 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.io.File
-import java.util.Date
 
 class MainActivity : AppCompatActivity() {
 
@@ -64,7 +62,7 @@ class MainActivity : AppCompatActivity() {
                     val parent = currentDir!!.parentFile
                     if (parent != null) loadFiles(parent) else finish()
                 } else {
-                    finish() // Fecha o app se estiver na raiz
+                    finish()
                 }
             }
         })
@@ -76,7 +74,6 @@ class MainActivity : AppCompatActivity() {
         currentDir = dir
         tvPath.text = dir.absolutePath
 
-        // Se for pasta restrita do Android, usa o Shizuku
         val isRestricted = dir.absolutePath.contains("/Android/data") || dir.absolutePath.contains("/Android/obb")
         
         if (isRestricted && rikka.shizuku.Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
@@ -96,8 +93,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadFilesWithShizuku(dir: File) {
         try {
-            // Comando ls para listar os arquivos (Shizuku)
-            val process = rikka.shizuku.Shizuku.newProcess(arrayOf("ls", "-a", dir.absolutePath), null, null)
+            val shizukuClass = Class.forName("rikka.shizuku.Shizuku")
+            val newProcessMethod = shizukuClass.getDeclaredMethod(
+                "newProcess",
+                Array<String>::class.java,
+                Array<String>::class.java,
+                String::class.java
+            )
+            newProcessMethod.isAccessible = true
+
+            val process = newProcessMethod.invoke(
+                null,
+                arrayOf("ls", "-a", dir.absolutePath),
+                null,
+                null
+            ) as rikka.shizuku.ShizukuRemoteProcess
+
             val reader = process.inputStream.bufferedReader()
             val files = mutableListOf<File>()
             var line = reader.readLine()
@@ -108,13 +119,12 @@ class MainActivity : AppCompatActivity() {
                 line = reader.readLine()
             }
             process.waitFor()
-            
-            // Ordena e adapta
+
             val sortedFiles = files.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
             setupAdapter(sortedFiles)
         } catch (e: Exception) {
             Toast.makeText(this, "Erro ao ler com Shizuku: ${e.message}", Toast.LENGTH_SHORT).show()
-            loadFilesNormally(dir) // Fallback
+            loadFilesNormally(dir)
         }
     }
 
