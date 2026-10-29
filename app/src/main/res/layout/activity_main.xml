@@ -16,34 +16,10 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:titleTextColor="#FFFFFF">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:gravity="center_vertical"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp">
-
-                <TextView
-                    android:id="@+id/tvTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="VSManager"
-                    android:textColor="#FFFFFF"
-                    android:textSize="20sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvPath"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="/storage/emulated/0"
-                    android:textColor="#888888"
-                    android:textSize="14sp" />
-            </LinearLayout>
-        </androidx.appcompat.widget.Toolbar>
+            app:title="VSManager"
+            app:titleTextColor="#FFFFFF"
+            app:subtitle="/storage/emulated/0"
+            app:subtitleTextColor="#888888" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.recyclerview.widget.RecyclerView

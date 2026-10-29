@@ -12,7 +12,8 @@ import java.util.Date
 
 class FileAdapter(
     private val files: List<File>,
-    private val onItemClick: (File) -> Unit
+    private val onClick: (File) -> Unit,
+    private val onLongClick: (File) -> Unit
 ) : RecyclerView.Adapter<FileAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -34,13 +35,18 @@ class FileAdapter(
             holder.icon.setImageResource(R.drawable.ic_folder)
             holder.subtitle.text = "Pasta"
         } else {
-            holder.icon.setImageResource(android.R.drawable.ic_menu_edit) // Ícone temporário
+            holder.icon.setImageResource(android.R.drawable.ic_menu_edit)
             val size = Formatter.formatShortFileSize(holder.itemView.context, file.length())
             val date = android.text.format.DateFormat.format("dd/MM/yyyy", Date(file.lastModified()))
             holder.subtitle.text = "$size • $date"
         }
 
-        holder.itemView.setOnClickListener { onItemClick(file) }
+        // Ações
+        holder.itemView.setOnClickListener { onClick(file) }
+        holder.itemView.setOnLongClickListener { 
+            onLongClick(file)
+            true
+        }
     }
 
     override fun getItemCount() = files.size

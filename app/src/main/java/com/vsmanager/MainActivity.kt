@@ -18,7 +18,6 @@ import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
@@ -32,7 +31,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var fabContainer: View
     private lateinit var recyclerView: RecyclerView
-    private lateinit var tvPath: TextView
+    private lateinit var toolbar: Toolbar
     private lateinit var adapter: FileAdapter
     private var currentDir: File? = null
     private var showHiddenFiles = false
@@ -44,23 +43,25 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
+        
+        // Remove o título padrão para usarmos o nosso
+        supportActionBar?.setDisplayShowTitleEnabled(false)
 
-        tvPath = findViewById(R.id.tvPath)
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
         fabContainer = findViewById(R.id.fabContainer)
 
-        tvPath.setOnClickListener { loadFiles(Environment.getExternalStorageDirectory()) }
         fabContainer.setOnClickListener { showFabMenu(it) }
 
+        // Lógica do botão de voltar do celular
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (isSearching) {
                     isSearching = false
                     supportActionBar?.setDisplayShowCustomEnabled(false)
-                    supportActionBar?.setDisplayShowTitleEnabled(true)
+                    supportActionBar?.setDisplayShowTitleEnabled(false)
                     invalidateOptionsMenu()
                     loadFiles(currentDir!!)
                 } else if (currentDir != null && currentDir!!.absolutePath != "/") {
@@ -77,7 +78,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadFiles(dir: File) {
         currentDir = dir
-        tvPath.text = dir.absolutePath
+        toolbar.subtitle = dir.absolutePath
         isSearching = false
 
         val isRestricted = dir.absolutePath.contains("/Android/data") || dir.absolutePath.contains("/Android/obb")
@@ -137,14 +138,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupAdapter(files: List<File>) {
-        adapter = FileAdapter(files) { file ->
-            if (file.isDirectory) {
-                loadFiles(file)
-            } else {
-                Toast.makeText(this, "Arquivo: ${file.name}", Toast.LENGTH_SHORT).show()
+        adapter = FileAdapter(files, 
+            onClick = { file ->
+                if (file.isDirectory) {
+                    loadFiles(file)
+                } else {
+                    Toast.makeText(this, "Arquivo: ${file.name}", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onLongClick = { file ->
+                showContextMenu(file)
             }
-        }
+        )
         recyclerView.adapter = adapter
+    }
+
+    // --- Lógica do Menu de Contexto (Segurar o dedo) ---
+    private fun showContextMenu(file: File) {
+        val options = arrayOf("Copiar", "Mover", "Renomear", "Excluir", "Informações")
+        MaterialAlertDialogBuilder(this)
+            .setTitle(file.name)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> Toast.makeText(this, "Copiar em breve", Toast.LENGTH_SHORT).show()
+                    1 -> Toast.makeText(this, "Mover em breve", Toast.LENGTH_SHORT).show()
+                    2 -> Toast.makeText(this, "Renomear em breve", Toast.LENGTH_SHORT).show()
+                    3 -> Toast.makeText(this, "Excluir em breve", Toast.LENGTH_SHORT).show()
+                    4 -> Toast.makeText(this, "Informações em breve", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .show()
     }
 
     // --- Menus ---
@@ -159,9 +182,8 @@ class MainActivity : AppCompatActivity() {
         when (item.itemId) {
             1 -> activateSearch()
             2 -> {
-                // AQUI ESTÁ A CORREÇÃO DO MENU: Ancorado no botão de 3 pontinhos
-                val actionView = findViewById<View>(R.id.toolbar)
-                showOptionsMenu(actionView)
+                // Ancora no botão de 3 pontinhos (o próprio toolbar)
+                showOptionsMenu(toolbar)
             }
         }
         return super.onOptionsItemSelected(item)
@@ -199,21 +221,12 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add("Mostrar ocultos")
         popup.menu.add("Multiseleção")
         popup.menu.add("Terminal")
-        popup.menu.add("Forçar Permissão Shizuku") // Opção nova para o Shizuku
         
         popup.setOnMenuItemClickListener { item ->
             when (item.title) {
                 "Mostrar ocultos" -> {
                     showHiddenFiles = !showHiddenFiles
                     currentDir?.let { loadFiles(it) }
-                    true
-                }
-                "Forçar Permissão Shizuku" -> {
-                    if (rikka.shizuku.Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                        rikka.shizuku.Shizuku.requestPermission(1)
-                    } else {
-                        Toast.makeText(this, "Shizuku já permitido!", Toast.LENGTH_SHORT).show()
-                    }
                     true
                 }
                 "Multiseleção" -> { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show(); true }
@@ -241,7 +254,6 @@ class MainActivity : AppCompatActivity() {
         popup.show()
     }
 
-    // --- Criar Pastas e Arquivos (Design Bonito) ---
     private fun showCreateDialog(isFolder: Boolean) {
         val input = EditText(this)
         val title = if (isFolder) "Nova Pasta" else "Novo Arquivo"
