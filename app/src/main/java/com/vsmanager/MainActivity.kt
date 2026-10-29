@@ -9,279 +9,218 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import android.text.format.Formatter
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import rikka.shizuku.Shizuku
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.widget.PopupMenu
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import java.io.File
 import java.util.Date
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var fabContainer: View
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var tvPath: TextView
+    private lateinit var adapter: FileAdapter
+    private var currentDir: File? = null
+    private var showHiddenFiles = false
+    private var isSearching = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+
+        tvPath = findViewById(R.id.tvPath)
+        recyclerView = findViewById(R.id.recyclerView)
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        fabContainer = findViewById(R.id.fabContainer)
+
+        tvPath.setOnClickListener { loadFiles(Environment.getExternalStorageDirectory()) }
+        fabContainer.setOnClickListener { showFabMenu(it) }
+
+        // Intercepta o botão de voltar do celular
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isSearching) {
+                    isSearching = false
+                    supportActionBar?.setDisplayShowCustomEnabled(false)
+                    supportActionBar?.setDisplayShowTitleEnabled(true)
+                    invalidateOptionsMenu()
+                    loadFiles(currentDir!!)
+                } else if (currentDir != null && currentDir!!.absolutePath != "/") {
+                    val parent = currentDir!!.parentFile
+                    if (parent != null) loadFiles(parent) else finish()
+                } else {
+                    finish() // Fecha o app se estiver na raiz
+                }
+            }
+        })
+
+        checkPermissions()
+    }
+
+    private fun loadFiles(dir: File) {
+        currentDir = dir
+        tvPath.text = dir.absolutePath
+
+        // Se for pasta restrita do Android, usa o Shizuku
+        val isRestricted = dir.absolutePath.contains("/Android/data") || dir.absolutePath.contains("/Android/obb")
         
+        if (isRestricted && rikka.shizuku.Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            loadFilesWithShizuku(dir)
+        } else {
+            loadFilesNormally(dir)
+        }
+    }
+
+    private fun loadFilesNormally(dir: File) {
+        val files = dir.listFiles()?.filter { 
+            showHiddenFiles || !it.name.startsWith(".") 
+        }?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+
+        setupAdapter(files)
+    }
+
+    private fun loadFilesWithShizuku(dir: File) {
+        try {
+            // Comando ls para listar os arquivos (Shizuku)
+            val process = rikka.shizuku.Shizuku.newProcess(arrayOf("ls", "-a", dir.absolutePath), null, null)
+            val reader = process.inputStream.bufferedReader()
+            val files = mutableListOf<File>()
+            var line = reader.readLine()
+            while (line != null) {
+                if (line != "." && line != ".." && (showHiddenFiles || !line.startsWith("."))) {
+                    files.add(File(dir, line))
+                }
+                line = reader.readLine()
+            }
+            process.waitFor()
+            
+            // Ordena e adapta
+            val sortedFiles = files.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+            setupAdapter(sortedFiles)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Erro ao ler com Shizuku: ${e.message}", Toast.LENGTH_SHORT).show()
+            loadFilesNormally(dir) // Fallback
+        }
+    }
+
+    private fun setupAdapter(files: List<File>) {
+        adapter = FileAdapter(files) { file ->
+            if (file.isDirectory) {
+                loadFiles(file)
+            } else {
+                Toast.makeText(this, "Arquivo: ${file.name}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        recyclerView.adapter = adapter
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.add(0, 1, 0, "Lupa").setIcon(R.drawable.ic_search).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        menu.add(0, 2, 1, "Opções").setIcon(R.drawable.ic_more_vert).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            1 -> Toast.makeText(this, "Pesquisa em breve", Toast.LENGTH_SHORT).show()
+            2 -> showOptionsMenu(findViewById(R.id.toolbar))
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    private fun showOptionsMenu(view: View) {
+        val popup = PopupMenu(this, view)
+        popup.menu.add("Mostrar ocultos")
+        popup.menu.add("Multiseleção")
+        popup.menu.add("Terminal")
+        popup.setOnMenuItemClickListener {
+            if (it.title == "Mostrar ocultos") {
+                showHiddenFiles = !showHiddenFiles
+                currentDir?.let { loadFiles(it) }
+                true
+            } else false
+        }
+        popup.show()
+    }
+
+    private fun showFabMenu(view: View) {
+        val popup = PopupMenu(this, view)
+        popup.menu.add("Nova pasta")
+        popup.menu.add("Novo arquivo")
+        popup.setOnMenuItemClickListener {
+            if (it.title == "Nova pasta") {
+                showCreateDialog(true)
+                true
+            } else {
+                showCreateDialog(false)
+                true
+            }
+        }
+        popup.show()
+    }
+
+    private fun showCreateDialog(isFolder: Boolean) {
+        val input = android.widget.EditText(this)
+        val title = if (isFolder) "Nova Pasta" else "Novo Arquivo"
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(input)
+            .setPositiveButton("Criar") { _, _ ->
+                val name = input.text.toString()
+                val newFile = File(currentDir, name)
+                try {
+                    if (isFolder) newFile.mkdirs() else newFile.createNewFile()
+                    loadFiles(currentDir!!)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Erro", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
                 val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
                 intent.data = Uri.parse("package:$packageName")
                 startActivity(intent)
-            }
-        }
-
-        if (Shizuku.isPreV11() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-            Shizuku.requestPermission(1)
-        }
-
-        setContent {
-            VSManagerTheme {
-                FileManagerScreen()
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FileManagerScreen() {
-    val context = LocalContext.current
-    var currentDir by remember { mutableStateOf(Environment.getExternalStorageDirectory()) }
-    var files by remember { mutableStateOf(listOf<File>()) }
-    var showHidden by remember { mutableStateOf(false) }
-    var fabOpen by remember { mutableStateOf(false) }
-    
-    // Controles dos diálogos
-    var showNewFolderDialog by remember { mutableStateOf(false) }
-    var showNewFileDialog by remember { mutableStateOf(false) }
-
-    fun loadFiles() {
-        val list = currentDir.listFiles()?.filter { 
-            showHidden || !it.name.startsWith(".") 
-        }?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
-        files = list
-    }
-
-    LaunchedEffect(currentDir, showHidden) {
-        loadFiles()
-    }
-
-    val rotation by animateFloatAsState(
-        targetValue = if (fabOpen) 90f else 0f,
-        animationSpec = tween(durationMillis = 200),
-        label = "fabRotation"
-    )
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("VSManager", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Text(
-                            text = currentDir.absolutePath,
-                            color = Color.Gray,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        val parent = currentDir.parentFile
-                        if (parent != null) currentDir = parent
-                    }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar", tint = Color.White)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* Lupa */ }) {
-                        Icon(Icons.Default.Search, contentDescription = "Pesquisar", tint = Color.White)
-                    }
-                    
-                    Box {
-                        var expanded by remember { mutableStateOf(false) }
-                        IconButton(onClick = { expanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Opções", tint = Color.White)
-                        }
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            DropdownMenuItem(text = { Text("Mostrar ocultos") }, onClick = {
-                                showHidden = !showHidden
-                                expanded = false
-                            })
-                            DropdownMenuItem(text = { Text("Multiseleção") }, onClick = { expanded = false })
-                            DropdownMenuItem(text = { Text("Terminal") }, onClick = { expanded = false })
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E1E1E))
-            )
-        },
-        floatingActionButton = {
-            Box {
-                FloatingActionButton(
-                    onClick = { fabOpen = !fabOpen },
-                    containerColor = Color(0xFF4F4F4F),
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = "Adicionar",
-                        modifier = Modifier.graphicsLayer { rotationZ = rotation }
-                    )
-                }
-                DropdownMenu(
-                    expanded = fabOpen,
-                    onDismissRequest = { fabOpen = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Nova pasta") },
-                        onClick = { showNewFolderDialog = true; fabOpen = false }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Novo arquivo") },
-                        onClick = { showNewFileDialog = true; fabOpen = false }
-                    )
+            } else {
+                loadFiles(Environment.getExternalStorageDirectory())
+                if (rikka.shizuku.Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                    rikka.shizuku.Shizuku.requestPermission(1)
                 }
             }
-        }
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF0F0F0F))
-                .padding(paddingValues),
-            contentPadding = PaddingValues(bottom = 80.dp)
-        ) {
-            items(files, key = { it.absolutePath }) { file ->
-                FileItem(file = file) {
-                    if (file.isDirectory) currentDir = file
-                }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
+            } else {
+                loadFiles(Environment.getExternalStorageDirectory())
             }
         }
     }
 
-    // Dialogo Nova Pasta
-    if (showNewFolderDialog) {
-        var name by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showNewFolderDialog = false },
-            title = { Text("Nova Pasta") },
-            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nome") }) },
-            confirmButton = {
-                TextButton(onClick = {
-                    File(currentDir, name).mkdirs()
-                    loadFiles()
-                    showNewFolderDialog = false
-                }) { Text("Criar") }
-            }
-        )
-    }
-
-    // Dialogo Novo Arquivo
-    if (showNewFileDialog) {
-        var name by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showNewFileDialog = false },
-            title = { Text("Novo Arquivo") },
-            text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nome") }) },
-            confirmButton = {
-                TextButton(onClick = {
-                    File(currentDir, name).createNewFile()
-                    loadFiles()
-                    showNewFileDialog = false
-                }) { Text("Criar") }
-            }
-        )
-    }
-}
-
-@Composable
-fun FileItem(file: File, onClick: () -> Unit) {
-    val context = LocalContext.current
-    val icon: ImageVector
-    val iconColor: Color
-    var subtitle = ""
-
-    if (file.isDirectory) {
-        icon = Icons.Outlined.Folder
-        iconColor = Color(0xFF64B5F6) // Azul pastel bonito
-        subtitle = "Pasta"
-    } else {
-        icon = Icons.Default.Description
-        iconColor = Color(0xFFAAAAAA)
-        val size = Formatter.formatShortFileSize(context, file.length())
-        val date = android.text.format.DateFormat.format("dd/MM/yyyy", Date(file.lastModified()))
-        subtitle = "$size • $date"
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(40.dp)
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column {
-            Text(
-                text = file.name,
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (subtitle.isNotEmpty()) {
-                Text(
-                    text = subtitle,
-                    color = Color.Gray,
-                    fontSize = 13.sp
-                )
+    override fun onResume() {
+        super.onResume()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager() && currentDir == null) {
+                loadFiles(Environment.getExternalStorageDirectory())
             }
         }
     }
-}
-
-@Composable
-fun VSManagerTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            background = Color(0xFF0F0F0F),
-            surface = Color(0xFF1E1E1E),
-            onSurface = Color.White
-        ),
-        content = content
-    )
 }

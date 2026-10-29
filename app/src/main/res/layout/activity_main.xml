@@ -52,7 +52,6 @@
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-    <!-- Botão + ESTÁTICO -->
     <FrameLayout
         android:id="@+id/fabContainer"
         android:layout_width="64dp"
