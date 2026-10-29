@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.text.format.Formatter
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.animateFloatAsState
@@ -17,28 +18,31 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import rikka.shizuku.Shizuku
 import java.io.File
+import java.util.Date
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Pedir permissão de arquivos
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
                 val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
@@ -47,7 +51,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Pedir permissão do Shizuku
         if (Shizuku.isPreV11() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
             Shizuku.requestPermission(1)
         }
@@ -68,10 +71,11 @@ fun FileManagerScreen() {
     var files by remember { mutableStateOf(listOf<File>()) }
     var showHidden by remember { mutableStateOf(false) }
     var fabOpen by remember { mutableStateOf(false) }
+    
+    // Controles dos diálogos
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var showNewFileDialog by remember { mutableStateOf(false) }
 
-    // Atualiza a lista de arquivos
     fun loadFiles() {
         val list = currentDir.listFiles()?.filter { 
             showHidden || !it.name.startsWith(".") 
@@ -83,7 +87,6 @@ fun FileManagerScreen() {
         loadFiles()
     }
 
-    // Animação do FAB
     val rotation by animateFloatAsState(
         targetValue = if (fabOpen) 90f else 0f,
         animationSpec = tween(durationMillis = 200),
@@ -106,16 +109,11 @@ fun FileManagerScreen() {
                     }
                 },
                 navigationIcon = {
-                    // Seta de voltar
                     IconButton(onClick = {
                         val parent = currentDir.parentFile
-                        if (parent != null && currentDir.absolutePath != "/") {
-                            currentDir = parent
-                        } else {
-                            (context as? ComponentActivity)?.finish()
-                        }
+                        if (parent != null) currentDir = parent
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Color.White)
                     }
                 },
                 actions = {
@@ -123,7 +121,6 @@ fun FileManagerScreen() {
                         Icon(Icons.Default.Search, contentDescription = "Pesquisar", tint = Color.White)
                     }
                     
-                    // Menu de 3 pontinhos
                     Box {
                         var expanded by remember { mutableStateOf(false) }
                         IconButton(onClick = { expanded = true }) {
@@ -149,8 +146,9 @@ fun FileManagerScreen() {
             Box {
                 FloatingActionButton(
                     onClick = { fabOpen = !fabOpen },
-                    containerColor = Color(0xFFD3D3D3),
-                    contentColor = Color.Black
+                    containerColor = Color(0xFF4F4F4F),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Add,
@@ -177,20 +175,19 @@ fun FileManagerScreen() {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF121212))
-                .padding(paddingValues)
+                .background(Color(0xFF0F0F0F))
+                .padding(paddingValues),
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            items(files) { file ->
+            items(files, key = { it.absolutePath }) { file -> // key para evitar lag
                 FileItem(file = file) {
-                    if (file.isDirectory) {
-                        currentDir = file
-                    }
+                    if (file.isDirectory) currentDir = file
                 }
             }
         }
     }
 
-    // Diálogo Nova Pasta
+    // Dialogo Nova Pasta
     if (showNewFolderDialog) {
         var name by remember { mutableStateOf("") }
         AlertDialog(
@@ -207,7 +204,7 @@ fun FileManagerScreen() {
         )
     }
 
-    // Diálogo Novo Arquivo
+    // Dialogo Novo Arquivo
     if (showNewFileDialog) {
         var name by remember { mutableStateOf("") }
         AlertDialog(
@@ -227,21 +224,54 @@ fun FileManagerScreen() {
 
 @Composable
 fun FileItem(file: File, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val icon: ImageVector
+    val iconColor: Color
+    var subtitle = ""
+
+    if (file.isDirectory) {
+        icon = Icons.Outlined.Folder
+        iconColor = Color(0xFF64B5F6) // Azul pastel bonito
+        subtitle = "Pasta"
+    } else {
+        icon = Icons.Default.Description
+        iconColor = Color(0xFFAAAAAA)
+        val size = Formatter.formatShortFileSize(context, file.length())
+        val date = android.text.format.DateFormat.format("dd/MM/yyyy", Date(file.lastModified()))
+        subtitle = "$size • $date"
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = if (file.isDirectory) Icons.Default.Folder else Icons.Default.Description,
+            imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFFD3D3D3),
-            modifier = Modifier.size(32.dp)
+            tint = iconColor,
+            modifier = Modifier.size(40.dp)
         )
         Spacer(modifier = Modifier.width(16.dp))
-        Text(text = file.name, color = Color.White, fontSize = 16.sp)
+        Column {
+            Text(
+                text = file.name,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (subtitle.isNotEmpty()) {
+                Text(
+                    text = subtitle,
+                    color = Color.Gray,
+                    fontSize = 13.sp
+                )
+            }
+        }
     }
 }
 
@@ -249,7 +279,7 @@ fun FileItem(file: File, onClick: () -> Unit) {
 fun VSManagerTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            background = Color(0xFF121212),
+            background = Color(0xFF0F0F0F),
             surface = Color(0xFF1E1E1E),
             onSurface = Color.White
         ),
