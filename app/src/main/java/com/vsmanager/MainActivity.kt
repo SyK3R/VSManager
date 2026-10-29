@@ -30,6 +30,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: FileAdapter
     private var isMenuOpen = false
+    private var currentDir: File? = null
+    private var showHiddenFiles = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,6 +39,9 @@ class MainActivity : AppCompatActivity() {
 
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
+        
+        // Remove o texto "VSManager" padrão para usar o nosso layout bonito
+        supportActionBar?.setDisplayShowTitleEnabled(false)
 
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -44,7 +49,6 @@ class MainActivity : AppCompatActivity() {
         fab = findViewById(R.id.fab)
         setupFabAnimation()
 
-        // Verifica permissão ao abrir
         checkPermissions()
     }
 
@@ -56,72 +60,87 @@ class MainActivity : AppCompatActivity() {
                 intent.data = Uri.parse(String.format("package:%s", applicationContext.packageName))
                 startActivity(intent)
             } else {
-                loadFiles()
+                loadFiles(Environment.getExternalStorageDirectory())
             }
         } else {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
             } else {
-                loadFiles()
+                loadFiles(Environment.getExternalStorageDirectory())
             }
         }
     }
 
-    // Pede permissão antiga
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                loadFiles()
+    private fun loadFiles(dir: File) {
+        currentDir = dir
+        val files = dir.listFiles()
+        
+        val filteredFiles = files?.filter { 
+            showHiddenFiles || !it.name.startsWith(".") 
+        }?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+
+        adapter = FileAdapter(filteredFiles) { file ->
+            if (file.isDirectory) {
+                loadFiles(file) // Se for pasta, entra nela
             } else {
-                Toast.makeText(this, "Permissão negada. O app não pode acessar os arquivos.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Arquivo: ${file.name}", Toast.LENGTH_SHORT).show()
             }
         }
+        recyclerView.adapter = adapter
     }
 
-    // Quando o usuário volta da tela de permissões
-    override fun onResume() {
-        super.onResume()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (Environment.isExternalStorageManager() && !::adapter.isInitialized) {
-                loadFiles()
-            }
-        }
-    }
-
-    private fun loadFiles() {
-        val rootPath = Environment.getExternalStorageDirectory().toString()
-        val file = File(rootPath)
-        val files = file.listFiles()
-
-        if (files != null) {
-            val sortedFiles = files.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
-            adapter = FileAdapter(sortedFiles)
-            recyclerView.adapter = adapter
-        } else {
-             Toast.makeText(this, "Não foi possível ler os arquivos.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
+    // --- Lógica do Menu de 3 Pontinhos ---
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, 1, 0, "Lupa").setIcon(android.R.drawable.ic_menu_search).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        menu.add(0, 2, 1, "Opções").setIcon(android.R.drawable.ic_menu_more).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        menu.add(0, 1, 0, "Lupa").setIcon(R.drawable.ic_search).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        menu.add(0, 2, 1, "Opções").setIcon(R.drawable.ic_more_vert).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             1 -> Toast.makeText(this, "Lupa clicada!", Toast.LENGTH_SHORT).show()
-            2 -> showOptionsMenu(findViewById(R.id.toolbar))
+            2 -> {
+                // O menu vai abrir colado no botão de 3 pontinhos
+                showOptionsMenu(findViewById(R.id.toolbar))
+            }
         }
         return super.onOptionsItemSelected(item)
     }
 
+    private fun showOptionsMenu(view: View) {
+        val popup = PopupMenu(this, view)
+        popup.menu.add("Mostrar ocultos")
+        popup.menu.add("Multiseleção")
+        popup.menu.add("Terminal")
+        
+        popup.setOnMenuItemClickListener { item ->
+            when (item.title) {
+                "Mostrar ocultos" -> {
+                    showHiddenFiles = !showHiddenFiles
+                    currentDir?.let { loadFiles(it) }
+                    true
+                }
+                "Multiseleção" -> {
+                    Toast.makeText(this, "Multiseleção (em breve)", Toast.LENGTH_SHORT).show()
+                    true
+                }
+                "Terminal" -> {
+                    Toast.makeText(this, "Terminal (em breve)", Toast.LENGTH_SHORT).show()
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    // --- Animação do Botão "+" ---
     private fun setupFabAnimation() {
         fab.setOnClickListener { view ->
-            val rotation = if (isMenuOpen) -360f else 360f
+            // Gira 45 graus para abrir, -45 para fechar. Isso é o padrão do Material Design.
+            val rotation = if (isMenuOpen) 0f else 45f
             val animator = ObjectAnimator.ofFloat(view, "rotation", rotation)
-            animator.duration = 1000
+            animator.duration = 1000 // 1 segundo como você pediu
             animator.interpolator = LinearInterpolator()
             animator.start()
 
@@ -134,14 +153,6 @@ class MainActivity : AppCompatActivity() {
         val popup = PopupMenu(this, view)
         popup.menu.add("Nova pasta")
         popup.menu.add("Novo arquivo")
-        popup.show()
-    }
-
-    private fun showOptionsMenu(view: View) {
-        val popup = PopupMenu(this, view)
-        popup.menu.add("Mostrar ocultos")
-        popup.menu.add("Multiseleção")
-        popup.menu.add("Terminal")
         popup.show()
     }
 }
