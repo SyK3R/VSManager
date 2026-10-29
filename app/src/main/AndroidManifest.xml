@@ -2,12 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissões de armazenamento -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
-
-    <!-- Permissões OBRIGATÓRIAS do Shizuku -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
@@ -16,7 +13,6 @@
         android:label="VSManager"
         android:theme="@style/Theme.VSManager">
         
-        <!-- Meta-data para suporte ao Shizuku V3 -->
         <meta-data
             android:name="moe.shizuku.client.V3_SUPPORT"
             android:value="true"
@@ -31,7 +27,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Configuração CORRETA do ShizukuProvider -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
