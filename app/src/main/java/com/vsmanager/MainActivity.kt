@@ -8,9 +8,12 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.EditText
 import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
@@ -22,6 +25,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -33,6 +37,8 @@ class MainActivity : AppCompatActivity() {
     private var currentDir: File? = null
     private var showHiddenFiles = false
     private var isSearching = false
+    private var allFiles: List<File> = emptyList()
+    private var searchEditText: EditText? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,7 +55,6 @@ class MainActivity : AppCompatActivity() {
         tvPath.setOnClickListener { loadFiles(Environment.getExternalStorageDirectory()) }
         fabContainer.setOnClickListener { showFabMenu(it) }
 
-        // Intercepta o botão de voltar do celular
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (isSearching) {
@@ -73,6 +78,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadFiles(dir: File) {
         currentDir = dir
         tvPath.text = dir.absolutePath
+        isSearching = false
 
         val isRestricted = dir.absolutePath.contains("/Android/data") || dir.absolutePath.contains("/Android/obb")
         
@@ -88,6 +94,7 @@ class MainActivity : AppCompatActivity() {
             showHiddenFiles || !it.name.startsWith(".") 
         }?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
 
+        allFiles = files
         setupAdapter(files)
     }
 
@@ -121,6 +128,7 @@ class MainActivity : AppCompatActivity() {
             process.waitFor()
 
             val sortedFiles = files.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+            allFiles = sortedFiles
             setupAdapter(sortedFiles)
         } catch (e: Exception) {
             Toast.makeText(this, "Erro ao ler com Shizuku: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -139,7 +147,9 @@ class MainActivity : AppCompatActivity() {
         recyclerView.adapter = adapter
     }
 
+    // --- Menus ---
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.clear()
         menu.add(0, 1, 0, "Lupa").setIcon(R.drawable.ic_search).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         menu.add(0, 2, 1, "Opções").setIcon(R.drawable.ic_more_vert).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         return true
@@ -147,33 +157,80 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            1 -> Toast.makeText(this, "Pesquisa em breve", Toast.LENGTH_SHORT).show()
-            2 -> showOptionsMenu(findViewById(R.id.toolbar))
+            1 -> activateSearch()
+            2 -> {
+                // AQUI ESTÁ A CORREÇÃO DO MENU: Ancorado no botão de 3 pontinhos
+                val actionView = findViewById<View>(R.id.toolbar)
+                showOptionsMenu(actionView)
+            }
         }
         return super.onOptionsItemSelected(item)
     }
 
-    private fun showOptionsMenu(view: View) {
-        val popup = PopupMenu(this, view)
+    private fun activateSearch() {
+        isSearching = true
+        val searchView = EditText(this).apply {
+            hint = "Pesquisar..."
+            setTextColor(android.graphics.Color.WHITE)
+            setHintTextColor(android.graphics.Color.GRAY)
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        }
+        searchEditText = searchView
+        
+        supportActionBar?.setDisplayShowTitleEnabled(false)
+        supportActionBar?.setDisplayShowCustomEnabled(true)
+        supportActionBar?.customView = searchView
+        invalidateOptionsMenu()
+
+        searchView.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                val query = s.toString().lowercase()
+                val filtered = allFiles.filter { it.name.lowercase().contains(query) }
+                setupAdapter(filtered)
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+        searchView.requestFocus()
+    }
+
+    private fun showOptionsMenu(anchorView: View) {
+        val popup = PopupMenu(this, anchorView)
         popup.menu.add("Mostrar ocultos")
         popup.menu.add("Multiseleção")
         popup.menu.add("Terminal")
-        popup.setOnMenuItemClickListener {
-            if (it.title == "Mostrar ocultos") {
-                showHiddenFiles = !showHiddenFiles
-                currentDir?.let { loadFiles(it) }
-                true
-            } else false
+        popup.menu.add("Forçar Permissão Shizuku") // Opção nova para o Shizuku
+        
+        popup.setOnMenuItemClickListener { item ->
+            when (item.title) {
+                "Mostrar ocultos" -> {
+                    showHiddenFiles = !showHiddenFiles
+                    currentDir?.let { loadFiles(it) }
+                    true
+                }
+                "Forçar Permissão Shizuku" -> {
+                    if (rikka.shizuku.Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                        rikka.shizuku.Shizuku.requestPermission(1)
+                    } else {
+                        Toast.makeText(this, "Shizuku já permitido!", Toast.LENGTH_SHORT).show()
+                    }
+                    true
+                }
+                "Multiseleção" -> { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show(); true }
+                "Terminal" -> { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show(); true }
+                else -> false
+            }
         }
         popup.show()
     }
 
-    private fun showFabMenu(view: View) {
-        val popup = PopupMenu(this, view)
+    private fun showFabMenu(anchorView: View) {
+        val popup = PopupMenu(this, anchorView)
         popup.menu.add("Nova pasta")
         popup.menu.add("Novo arquivo")
-        popup.setOnMenuItemClickListener {
-            if (it.title == "Nova pasta") {
+        
+        popup.setOnMenuItemClickListener { item ->
+            if (item.title == "Nova pasta") {
                 showCreateDialog(true)
                 true
             } else {
@@ -184,10 +241,12 @@ class MainActivity : AppCompatActivity() {
         popup.show()
     }
 
+    // --- Criar Pastas e Arquivos (Design Bonito) ---
     private fun showCreateDialog(isFolder: Boolean) {
-        val input = android.widget.EditText(this)
+        val input = EditText(this)
         val title = if (isFolder) "Nova Pasta" else "Novo Arquivo"
-        AlertDialog.Builder(this)
+        
+        MaterialAlertDialogBuilder(this)
             .setTitle(title)
             .setView(input)
             .setPositiveButton("Criar") { _, _ ->
