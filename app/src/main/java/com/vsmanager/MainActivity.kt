@@ -61,14 +61,17 @@ class MainActivity : AppCompatActivity() {
         currentDir = dir
         tvPath.text = dir.absolutePath
 
+        // Pega os arquivos reais
         val files = dir.listFiles()
+        
+        // Filtra e ordena (pastas primeiro, depois arquivos)
         val filteredFiles = files?.filter { 
             showHiddenFiles || !it.name.startsWith(".") 
         }?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
 
         adapter = FileAdapter(filteredFiles) { file ->
             if (file.isDirectory) {
-                loadFiles(file)
+                loadFiles(file) // Entra na pasta
             } else {
                 Toast.makeText(this, "Arquivo: ${file.name}", Toast.LENGTH_SHORT).show()
             }
@@ -76,6 +79,7 @@ class MainActivity : AppCompatActivity() {
         recyclerView.adapter = adapter
     }
 
+    // Botão de voltar do celular
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (currentDir != null && currentDir!!.absolutePath != Environment.getExternalStorageDirectory().absolutePath) {
@@ -85,6 +89,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Menus de cima (Lupa e 3 pontinhos)
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(0, 1, 0, "Lupa").setIcon(R.drawable.ic_search).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
         menu.add(0, 2, 1, "Opções").setIcon(R.drawable.ic_more_vert).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
@@ -93,11 +98,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            1 -> Toast.makeText(this, "Lupa: Pesquisa em breve!", Toast.LENGTH_SHORT).show()
-            2 -> {
-                val view = findViewById<View>(R.id.toolbar)
-                showOptionsMenu(view)
-            }
+            1 -> Toast.makeText(this, "Lupa em breve!", Toast.LENGTH_SHORT).show()
+            2 -> showOptionsMenu(findViewById(R.id.toolbar))
         }
         return super.onOptionsItemSelected(item)
     }
@@ -115,14 +117,13 @@ class MainActivity : AppCompatActivity() {
                     currentDir?.let { loadFiles(it) }
                     true
                 }
-                "Multiseleção" -> { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show(); true }
-                "Terminal" -> { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show(); true }
                 else -> false
             }
         }
         popup.show()
     }
 
+    // Animação do Botão +
     private fun setupFabAnimation() {
         fabContainer.setOnClickListener { view ->
             val rotation = if (isMenuOpen) 0f else 45f
@@ -140,14 +141,10 @@ class MainActivity : AppCompatActivity() {
         val popup = PopupMenu(this, view)
         popup.menu.add("Nova pasta")
         popup.menu.add("Novo arquivo")
-        
-        popup.setOnMenuItemClickListener { item ->
-            Toast.makeText(this, "${item.title} clicado!", Toast.LENGTH_SHORT).show()
-            true
-        }
         popup.show()
     }
 
+    // Permissões
     private fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
