@@ -33,6 +33,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -98,7 +99,8 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
                 R.id.nav_ftp -> {
-                    Toast.makeText(this, "Servidor FTP em breve", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    showFtpSheet()
                     drawerLayout.closeDrawers()
                     true
                 }
@@ -636,6 +638,61 @@ class MainActivity : AppCompatActivity() {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
             } else loadFiles(Environment.getExternalStorageDirectory())
         }
+    }
+
+    private fun showFtpSheet() {
+        val prefs = getSharedPreferences("ftp", MODE_PRIVATE)
+        if (!prefs.contains("pass")) {
+            prefs.edit().putString("pass", (100000..999999).random().toString()).apply()
+        }
+
+        val v = layoutInflater.inflate(R.layout.sheet_ftp, null)
+        val sw = v.findViewById<SwitchCompat>(R.id.ftpSwitch)
+        val status = v.findViewById<TextView>(R.id.ftpStatus)
+        val addr = v.findViewById<TextView>(R.id.ftpAddress)
+        val cred = v.findViewById<TextView>(R.id.ftpCred)
+
+        fun refresh() {
+            val on = FtpService.running
+            sw.isChecked = on
+            status.text = if (on) "Ligado" else "Desligado"
+            addr.text = if (on) FtpService.address else "Ligue para ver o endereco"
+            cred.text = "Usuario: ${prefs.getString("user", "vsmanager")}\n" +
+                        "Senha:   ${prefs.getString("pass", "")}\n" +
+                        "Porta:   ${prefs.getInt("port", 2121)}"
+            FtpService.error?.let {
+                Toast.makeText(this, it, Toast.LENGTH_LONG).show()
+                FtpService.error = null
+            }
+        }
+
+        sw.setOnClickListener {
+            if (sw.isChecked) {
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
+                }
+                ContextCompat.startForegroundService(this, Intent(this, FtpService::class.java))
+            } else {
+                stopService(Intent(this, FtpService::class.java))
+            }
+        }
+
+        v.findViewById<View>(R.id.ftpNewPass).setOnClickListener {
+            prefs.edit().putString("pass", (100000..999999).random().toString()).apply()
+            if (FtpService.running) {
+                Toast.makeText(this, "Desligue e ligue o servidor para aplicar", Toast.LENGTH_LONG).show()
+            }
+            refresh()
+        }
+
+        val dialog = BottomSheetDialog(this)
+        dialog.setContentView(v)
+        (v.parent as View).setBackgroundColor(Color.TRANSPARENT)
+        FtpService.onChange = { refresh() }
+        dialog.setOnDismissListener { FtpService.onChange = null }
+        refresh()
+        dialog.show()
     }
 
     override fun onResume() {
