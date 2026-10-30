@@ -32,8 +32,8 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
 import androidx.appcompat.widget.SwitchCompat
+import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -73,7 +73,6 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayShowTitleEnabled(false)
 
-        // --- CONFIGURAÇÃO DO MENU LATERAL ---
         val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
         val navView = findViewById<NavigationView>(R.id.navView)
         val toggle = androidx.appcompat.app.ActionBarDrawerToggle(
@@ -102,7 +101,6 @@ class MainActivity : AppCompatActivity() {
                     drawerLayout.closeDrawers()
                     startActivity(Intent(this, FtpActivity::class.java))
                     true
-                }
                 }
                 R.id.nav_settings -> {
                     Toast.makeText(this, "Configurações em breve", Toast.LENGTH_SHORT).show()
@@ -311,21 +309,6 @@ class MainActivity : AppCompatActivity() {
         dialog.setContentView(v)
         (v.parent as View).setBackgroundColor(Color.TRANSPARENT)
         dialog.show()
-    }
-
-    private fun showStorageSheet() {
-        val st = android.os.StatFs(Environment.getExternalStorageDirectory().path)
-        val total = st.totalBytes; val free = st.availableBytes; val used = total - free
-        val v = layoutInflater.inflate(R.layout.sheet_storage, null)
-        v.findViewById<ProgressBar>(R.id.storageBar).progress = (used * 100 / total).toInt()
-        v.findViewById<TextView>(R.id.storageUsed).text =
-            "${Formatter.formatShortFileSize(this, used)} usados de ${Formatter.formatShortFileSize(this, total)}"
-        v.findViewById<TextView>(R.id.storageFree).text = "${Formatter.formatShortFileSize(this, free)} livres"
-        BottomSheetDialog(this).apply {
-            setContentView(v)
-            (v.parent as View).setBackgroundColor(Color.TRANSPARENT)
-            show()
-        }
     }
 
     private fun showFabMenu(anchorView: View) {
@@ -638,7 +621,6 @@ class MainActivity : AppCompatActivity() {
             } else loadFiles(Environment.getExternalStorageDirectory())
         }
     }
-
 
     override fun onResume() {
         super.onResume()
