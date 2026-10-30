@@ -45,7 +45,12 @@ class FtpService : Service() {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
         if (running) return START_NOT_STICKY
 
-        startInForeground()
+        try {
+            startInForeground()
+        } catch (e: Exception) {
+            fail("Erro ao iniciar o servico: ${e.message}")
+            return START_NOT_STICKY
+        }
 
         val ip = localIp()
         if (ip == null) { fail("Conecte-se a uma rede Wi-Fi primeiro"); return START_NOT_STICKY }
