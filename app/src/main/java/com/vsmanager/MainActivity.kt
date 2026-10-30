@@ -58,7 +58,6 @@ class MainActivity : AppCompatActivity() {
     private var isSelectionMode = false
     private val selectedFiles = mutableSetOf<File>()
     
-    // Variáveis de Copiar/Mover
     private var clipboard: List<File> = emptyList()
     private var clipboardCut = false
 
@@ -127,7 +126,9 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { if (!last) loadFiles(f) }
             })
         }
-        findViewById<HorizontalScrollView>(R.id.crumbScroll).post { fullScroll(View.FOCUS_RIGHT) }
+        
+        val scrollView = findViewById<HorizontalScrollView>(R.id.crumbScroll)
+        scrollView.post { scrollView.fullScroll(View.FOCUS_RIGHT) }
 
         val st = android.os.StatFs(root.path)
         val used = st.totalBytes - st.availableBytes
@@ -208,7 +209,6 @@ class MainActivity : AppCompatActivity() {
         recyclerView.adapter = adapter
     }
 
-    // --- BOTTOM SHEET E POPUPS ---
     private data class PopupItem(val title: String, val iconRes: Int, val onClick: () -> Unit)
     private data class SheetAction(val title: String, val icon: String, val danger: Boolean = false, val run: () -> Unit)
 
@@ -313,7 +313,6 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // --- AÇÕES DE APK E CONTEXTO ---
     private fun showApkSheet(file: File) {
         val pm = packageManager
         val info = pm.getPackageArchiveInfo(file.absolutePath, 0)
