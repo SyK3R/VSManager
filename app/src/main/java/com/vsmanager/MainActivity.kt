@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity() {
     
     private var clipboard: List<File> = emptyList()
     private var clipboardCut = false
+    private val textExt = setOf("txt","md","json","xml","html","css","js","kt","java","py","sh","log","ini","cfg","conf","properties","gradle","yml","yaml","csv","toml","sql","kts")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
