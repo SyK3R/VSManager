@@ -36,12 +36,20 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".TerminalActivity" android:exported="false" />
+        <activity
+            android:name=".TerminalActivity"
+            android:exported="false" />
 
-        <activity android:name=".EditorActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".EditorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
-        <activity android:name=".FtpActivity" android:exported="false" />
+        <activity
+            android:name=".FtpActivity"
+            android:exported="false" />
 
+        <!-- Tag limpa, sem a permissão que estava bloqueando -->
         <service
             android:name=".FtpService"
             android:exported="false"
