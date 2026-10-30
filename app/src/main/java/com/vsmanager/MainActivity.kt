@@ -159,6 +159,10 @@ class MainActivity : AppCompatActivity() {
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_menu_overflow_material)
         }
+        if (atRoot) {
+            supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            supportActionBar?.setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_menu_overflow_material)
+        }
         supportActionBar?.setHomeAsUpIndicator(pathIcon(Icons.BACK))
         header.visibility = View.VISIBLE
         toolbar.title = if (atRoot) "Armazenamento" else dir.name
@@ -249,6 +253,7 @@ class MainActivity : AppCompatActivity() {
             onItemClick = { file ->
                 if (file.isDirectory) loadFiles(file)
                 else if (file.name.endsWith(".apk", ignoreCase = true)) showApkSheet(file)
+                else if (file.extension.lowercase() in textExt) openEditor(file)
                 else Toast.makeText(this, "Abrir: ${file.name}", Toast.LENGTH_SHORT).show()
             },
             onIconClick = { file -> toggleSelection(file) },
@@ -345,7 +350,7 @@ class MainActivity : AppCompatActivity() {
                     currentDir?.let { loadFiles(it) }
                 },
                 PopupItem("Armazenamento", R.drawable.ic_storage) { showStorageSheet() },
-                PopupItem("Terminal", R.drawable.ic_terminal) { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show() }
+                PopupItem("Terminal", R.drawable.ic_terminal) { startActivity(android.content.Intent(this, TerminalActivity::class.java)) }
             )
         )
     }
@@ -425,6 +430,7 @@ class MainActivity : AppCompatActivity() {
             SheetAction("Renomear", Icons.EDIT) { showRenameDialog(file) },
             SheetAction("Compactar (.zip)", Icons.ZIP) { zipFiles(listOf(file)) }
         )
+        if (!file.isDirectory) actions.add(SheetAction("Editar como texto", Icons.EDIT) { openEditor(file) })
         if (file.extension.equals("zip", true) || file.extension.equals("apk", true))
             actions.add(SheetAction("Descompactar aqui", Icons.UNZIP) { unzip(file) })
         actions.add(SheetAction("Informações", Icons.INFO) { showInfoDialog(file) })
@@ -719,6 +725,14 @@ class MainActivity : AppCompatActivity() {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
             } else loadFiles(Environment.getExternalStorageDirectory())
         }
+    }
+
+    private fun openEditor(file: File) {
+        if (file.length() > 5L * 1024 * 1024) {
+            Toast.makeText(this, "Arquivo grande demais para o editor (máx. 5 MB)", Toast.LENGTH_LONG).show()
+            return
+        }
+        startActivity(Intent(this, EditorActivity::class.java).putExtra("path", file.absolutePath))
     }
 
     override fun onResume() {

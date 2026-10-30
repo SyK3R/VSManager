@@ -1,0 +1,35 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#121212">
+
+    <androidx.appcompat.widget.Toolbar android:id="@+id/toolbar"
+        android:layout_width="match_parent" android:layout_height="?attr/actionBarSize"
+        android:background="#1E1E1E" app:titleTextColor="#FFFFFF"/>
+
+    <LinearLayout android:id="@+id/searchBar" android:layout_width="match_parent"
+        android:layout_height="48dp" android:orientation="horizontal" android:gravity="center_vertical"
+        android:background="#2A2A33" android:paddingStart="16dp" android:paddingEnd="8dp"
+        android:visibility="gone">
+        <EditText android:id="@+id/searchInput" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="match_parent" android:hint="Buscar no texto" android:singleLine="true"
+            android:imeOptions="actionSearch" android:textColor="#FFFFFF" android:textColorHint="#8A8A93"
+            android:background="@null" android:textSize="15sp"/>
+        <TextView android:id="@+id/searchPrev" android:layout_width="44dp" android:layout_height="44dp"
+            android:gravity="center" android:text="↑" android:textColor="#B8C4FF" android:textSize="20sp"
+            android:background="?attr/selectableItemBackgroundBorderless"/>
+        <TextView android:id="@+id/searchNext" android:layout_width="44dp" android:layout_height="44dp"
+            android:gravity="center" android:text="↓" android:textColor="#B8C4FF" android:textSize="20sp"
+            android:background="?attr/selectableItemBackgroundBorderless"/>
+    </LinearLayout>
+
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:fillViewport="true">
+        <EditText android:id="@+id/editor" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="400dp"
+            android:gravity="top|start" android:background="@null"
+            android:inputType="textMultiLine|textNoSuggestions"
+            android:padding="14dp" android:textColor="#E6E6E6"
+            android:textCursorDrawable="@null" android:textIsSelectable="true"/>
+    </ScrollView>
+</LinearLayout>
