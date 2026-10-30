@@ -42,6 +42,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import androidx.drawerlayout.widget.DrawerLayout
+import com.google.android.material.navigation.NavigationView
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -68,6 +70,52 @@ class MainActivity : AppCompatActivity() {
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayShowTitleEnabled(false)
+
+        // --- CONFIGURAÇÃO DO MENU LATERAL ---
+        val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+        val navView = findViewById<NavigationView>(R.id.navView)
+        val toggle = androidx.appcompat.app.ActionBarDrawerToggle(
+            this, drawerLayout, toolbar, R.string.app_name, R.string.app_name
+        )
+        drawerLayout.addDrawerListener(toggle)
+        toggle.syncState()
+
+        // Atualiza a barra de armazenamento no fundo do menu
+        val statRoot = Environment.getExternalStorageDirectory()
+        val stat = android.os.StatFs(statRoot.path)
+        val used = stat.totalBytes - stat.availableBytes
+        findViewById<ProgressBar>(R.id.storageBar).progress = (used * 100 / stat.totalBytes).toInt()
+        findViewById<TextView>(R.id.storageText).text =
+            "${Formatter.formatShortFileSize(this, used)} usados de ${Formatter.formatShortFileSize(this, stat.totalBytes)}"
+
+        // Ações do Menu Lateral
+        navView.setNavigationItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_downloads -> {
+                    val downloadDir = File(Environment.getExternalStorageDirectory(), "Download")
+                    if (downloadDir.exists()) loadFiles(downloadDir)
+                    else Toast.makeText(this, "Pasta Download não encontrada", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_ftp -> {
+                    Toast.makeText(this, "Servidor FTP em breve", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_settings -> {
+                    Toast.makeText(this, "Configurações em breve", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_about -> {
+                    Toast.makeText(this, "VSManager v1.0", Toast.LENGTH_LONG).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                else -> false
+            }
+        }
 
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -107,6 +155,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         supportActionBar?.setDisplayHomeAsUpEnabled(!atRoot)
+        if (atRoot) {
+            supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            supportActionBar?.setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_menu_overflow_material)
+        }
         supportActionBar?.setHomeAsUpIndicator(pathIcon(Icons.BACK))
         header.visibility = View.VISIBLE
         toolbar.title = if (atRoot) "Armazenamento" else dir.name
@@ -501,6 +553,52 @@ class MainActivity : AppCompatActivity() {
         if (isSearching) { closeSearch(); return }
         isSearching = true
         supportActionBar?.setDisplayShowTitleEnabled(false)
+
+        // --- CONFIGURAÇÃO DO MENU LATERAL ---
+        val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+        val navView = findViewById<NavigationView>(R.id.navView)
+        val toggle = androidx.appcompat.app.ActionBarDrawerToggle(
+            this, drawerLayout, toolbar, R.string.app_name, R.string.app_name
+        )
+        drawerLayout.addDrawerListener(toggle)
+        toggle.syncState()
+
+        // Atualiza a barra de armazenamento no fundo do menu
+        val statRoot = Environment.getExternalStorageDirectory()
+        val stat = android.os.StatFs(statRoot.path)
+        val used = stat.totalBytes - stat.availableBytes
+        findViewById<ProgressBar>(R.id.storageBar).progress = (used * 100 / stat.totalBytes).toInt()
+        findViewById<TextView>(R.id.storageText).text =
+            "${Formatter.formatShortFileSize(this, used)} usados de ${Formatter.formatShortFileSize(this, stat.totalBytes)}"
+
+        // Ações do Menu Lateral
+        navView.setNavigationItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_downloads -> {
+                    val downloadDir = File(Environment.getExternalStorageDirectory(), "Download")
+                    if (downloadDir.exists()) loadFiles(downloadDir)
+                    else Toast.makeText(this, "Pasta Download não encontrada", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_ftp -> {
+                    Toast.makeText(this, "Servidor FTP em breve", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_settings -> {
+                    Toast.makeText(this, "Configurações em breve", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_about -> {
+                    Toast.makeText(this, "VSManager v1.0", Toast.LENGTH_LONG).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                else -> false
+            }
+        }
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
         
         val searchView = EditText(this).apply {
@@ -528,6 +626,52 @@ class MainActivity : AppCompatActivity() {
         isSearching = false
         supportActionBar?.setDisplayShowCustomEnabled(false)
         supportActionBar?.setDisplayShowTitleEnabled(false)
+
+        // --- CONFIGURAÇÃO DO MENU LATERAL ---
+        val drawerLayout = findViewById<DrawerLayout>(R.id.drawerLayout)
+        val navView = findViewById<NavigationView>(R.id.navView)
+        val toggle = androidx.appcompat.app.ActionBarDrawerToggle(
+            this, drawerLayout, toolbar, R.string.app_name, R.string.app_name
+        )
+        drawerLayout.addDrawerListener(toggle)
+        toggle.syncState()
+
+        // Atualiza a barra de armazenamento no fundo do menu
+        val statRoot = Environment.getExternalStorageDirectory()
+        val stat = android.os.StatFs(statRoot.path)
+        val used = stat.totalBytes - stat.availableBytes
+        findViewById<ProgressBar>(R.id.storageBar).progress = (used * 100 / stat.totalBytes).toInt()
+        findViewById<TextView>(R.id.storageText).text =
+            "${Formatter.formatShortFileSize(this, used)} usados de ${Formatter.formatShortFileSize(this, stat.totalBytes)}"
+
+        // Ações do Menu Lateral
+        navView.setNavigationItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_downloads -> {
+                    val downloadDir = File(Environment.getExternalStorageDirectory(), "Download")
+                    if (downloadDir.exists()) loadFiles(downloadDir)
+                    else Toast.makeText(this, "Pasta Download não encontrada", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_ftp -> {
+                    Toast.makeText(this, "Servidor FTP em breve", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_settings -> {
+                    Toast.makeText(this, "Configurações em breve", Toast.LENGTH_SHORT).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_about -> {
+                    Toast.makeText(this, "VSManager v1.0", Toast.LENGTH_LONG).show()
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                else -> false
+            }
+        }
         invalidateOptionsMenu()
         if (reload && currentDir != null) loadFilesNormally(currentDir!!)
         updateToolbar()
