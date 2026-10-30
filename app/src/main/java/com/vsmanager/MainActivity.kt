@@ -90,21 +90,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateToolbar() {
+        invalidateOptionsMenu()
         val header = findViewById<View>(R.id.headerPath)
+        val root = Environment.getExternalStorageDirectory()
+        val dir = currentDir ?: root
+        val atRoot = dir.absolutePath == root.absolutePath
+
         if (isSelectionMode) {
-            supportActionBar?.setHomeAsUpIndicator(android.R.drawable.ic_menu_close_clear_cancel)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            supportActionBar?.setHomeAsUpIndicator(android.R.drawable.ic_menu_close_clear_cancel)
             val n = selectedFiles.size
             toolbar.title = "$n ${if (n == 1) "selecionado" else "selecionados"}"
             toolbar.subtitle = null
             header.visibility = View.GONE
             return
         }
-        
+
+        supportActionBar?.setDisplayHomeAsUpEnabled(!atRoot)
+        supportActionBar?.setHomeAsUpIndicator(pathIcon(Icons.BACK))
         header.visibility = View.VISIBLE
-        val root = Environment.getExternalStorageDirectory()
-        val dir = currentDir ?: root
-        toolbar.title = if (dir.absolutePath == root.absolutePath) "Armazenamento Interno" else dir.name
+        toolbar.title = if (atRoot) "Armazenamento" else dir.name
         toolbar.subtitle = null
 
         val crumbs = findViewById<LinearLayout>(R.id.crumbs)
@@ -126,15 +131,8 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { if (!last) loadFiles(f) }
             })
         }
-        
-        val scrollView = findViewById<HorizontalScrollView>(R.id.crumbScroll)
-        scrollView.post { scrollView.fullScroll(View.FOCUS_RIGHT) }
-
-        val st = android.os.StatFs(root.path)
-        val used = st.totalBytes - st.availableBytes
-        findViewById<ProgressBar>(R.id.storageBar).progress = (used * 100 / st.totalBytes).toInt()
-        findViewById<TextView>(R.id.storageText).text =
-            "${Formatter.formatShortFileSize(this, used)} usados de ${Formatter.formatShortFileSize(this, st.totalBytes)}"
+        val sv = findViewById<HorizontalScrollView>(R.id.crumbScroll)
+        sv.post { sv.fullScroll(View.FOCUS_RIGHT) }
     }
 
     private fun loadFiles(dir: File) {
@@ -261,6 +259,21 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun showStorageSheet() {
+        val st = android.os.StatFs(Environment.getExternalStorageDirectory().path)
+        val total = st.totalBytes; val free = st.availableBytes; val used = total - free
+        val v = layoutInflater.inflate(R.layout.sheet_storage, null)
+        v.findViewById<ProgressBar>(R.id.storageBar).progress = (used * 100 / total).toInt()
+        v.findViewById<TextView>(R.id.storageUsed).text =
+            "${Formatter.formatShortFileSize(this, used)} usados de ${Formatter.formatShortFileSize(this, total)}"
+        v.findViewById<TextView>(R.id.storageFree).text = "${Formatter.formatShortFileSize(this, free)} livres"
+        BottomSheetDialog(this).apply {
+            setContentView(v)
+            (v.parent as View).setBackgroundColor(Color.TRANSPARENT)
+            show()
+        }
+    }
+
     private fun showFabMenu(anchorView: View) {
         val items = mutableListOf(
             PopupItem("Nova pasta", R.drawable.ic_create_new_folder) { showCreateDialog(true) },
@@ -274,9 +287,12 @@ class MainActivity : AppCompatActivity() {
         showStyledPopup(
             anchorView,
             listOf(
-                PopupItem(if (showHiddenFiles) "Ocultar ocultos" else "Mostrar ocultos", R.drawable.ic_visibility) {
-                    showHiddenFiles = !showHiddenFiles; currentDir?.let { loadFiles(it) }
+                PopupItem("Mostrar ocultos",
+                    if (showHiddenFiles) R.drawable.ic_visibility else R.drawable.ic_visibility_off) {
+                    showHiddenFiles = !showHiddenFiles
+                    currentDir?.let { loadFiles(it) }
                 },
+                PopupItem("Armazenamento", R.drawable.ic_storage) { showStorageSheet() },
                 PopupItem("Terminal", R.drawable.ic_terminal) { Toast.makeText(this, "Em breve", Toast.LENGTH_SHORT).show() }
             )
         )

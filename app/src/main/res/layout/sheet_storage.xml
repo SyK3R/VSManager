@@ -1,0 +1,16 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:background="@drawable/bg_sheet"
+    android:padding="24dp">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Armazenamento interno" android:textColor="#F2F2F7" android:textSize="18sp"/>
+    <ProgressBar android:id="@+id/storageBar" style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent" android:layout_height="8dp" android:layout_marginTop="16dp"
+        android:progressTint="#A0A0AB" android:progressBackgroundTint="#33FFFFFF"/>
+    <TextView android:id="@+id/storageUsed" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:layout_marginTop="10dp"
+        android:textColor="#F2F2F7" android:textSize="15sp"/>
+    <TextView android:id="@+id/storageFree" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:layout_marginTop="2dp"
+        android:textColor="#9A9AA5" android:textSize="13sp"/>
+</LinearLayout>
