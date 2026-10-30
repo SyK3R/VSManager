@@ -14,7 +14,9 @@ class SimpleFtpServer(
     private val port: Int,
     rootDir: File,
     private val user: String,
-    private val pass: String
+    private val pass: String,
+    private val anonymous: Boolean,
+    private val readOnly: Boolean
 ) {
     private val root = rootDir.canonicalFile
     private var server: ServerSocket? = null
@@ -95,9 +97,9 @@ class SimpleFtpServer(
 
         private fun handle(cmd: String, arg: String): Boolean {
             when (cmd) {
-                "USER" -> { gotUser = arg == user; authed = false; send("331 Senha necessaria"); return true }
+                "USER" -> { gotUser = anonymous || arg == user; authed = false; send("331 Senha necessaria"); return true }
                 "PASS" -> {
-                    authed = gotUser && arg == pass
+                    authed = gotUser && (anonymous || arg == pass)
                     send(if (authed) "230 Autenticado" else "530 Login incorreto"); return true
                 }
                 "QUIT" -> { send("221 Ate logo"); return false }
@@ -106,6 +108,10 @@ class SimpleFtpServer(
                 "OPTS", "NOOP", "TYPE", "MODE", "STRU" -> { send("200 OK"); return true }
             }
             if (!authed) { send("530 Faca login primeiro"); return true }
+
+            if (readOnly && cmd in setOf("STOR", "APPE", "DELE", "RMD", "XRMD", "MKD", "XMKD", "RNFR", "RNTO")) {
+                send("550 Servidor em modo somente leitura"); return true
+            }
 
             when (cmd) {
                 "PWD", "XPWD" -> send("257 \"$cwd\"")

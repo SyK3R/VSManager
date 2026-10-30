@@ -100,9 +100,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 R.id.nav_ftp -> {
                     drawerLayout.closeDrawers()
-                    showFtpSheet()
-                    drawerLayout.closeDrawers()
+                    startActivity(Intent(this, FtpActivity::class.java))
                     true
+                }
                 }
                 R.id.nav_settings -> {
                     Toast.makeText(this, "Configurações em breve", Toast.LENGTH_SHORT).show()
@@ -158,7 +158,7 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(!atRoot)
         if (atRoot) {
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
-            supportActionBar?.setHomeAsUpIndicator(androidx.appcompat.R.drawable.abc_ic_menu_overflow_material)
+            supportActionBar?.setHomeAsUpIndicator(R.drawable.ic_menu_hamburger)
         }
         
         header.visibility = View.VISIBLE
@@ -346,7 +346,6 @@ class MainActivity : AppCompatActivity() {
                     showHiddenFiles = !showHiddenFiles
                     currentDir?.let { loadFiles(it) }
                 },
-                PopupItem("Armazenamento", R.drawable.ic_storage) { showStorageSheet() },
                 PopupItem("Terminal", R.drawable.ic_terminal) { startActivity(Intent(this, TerminalActivity::class.java)) }
             )
         )
@@ -640,60 +639,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showFtpSheet() {
-        val prefs = getSharedPreferences("ftp", MODE_PRIVATE)
-        if (!prefs.contains("pass")) {
-            prefs.edit().putString("pass", (100000..999999).random().toString()).apply()
-        }
-
-        val v = layoutInflater.inflate(R.layout.sheet_ftp, null)
-        val sw = v.findViewById<SwitchCompat>(R.id.ftpSwitch)
-        val status = v.findViewById<TextView>(R.id.ftpStatus)
-        val addr = v.findViewById<TextView>(R.id.ftpAddress)
-        val cred = v.findViewById<TextView>(R.id.ftpCred)
-
-        fun refresh() {
-            val on = FtpService.running
-            sw.isChecked = on
-            status.text = if (on) "Ligado" else "Desligado"
-            addr.text = if (on) FtpService.address else "Ligue para ver o endereco"
-            cred.text = "Usuario: ${prefs.getString("user", "vsmanager")}\n" +
-                        "Senha:   ${prefs.getString("pass", "")}\n" +
-                        "Porta:   ${prefs.getInt("port", 2121)}"
-            FtpService.error?.let {
-                Toast.makeText(this, it, Toast.LENGTH_LONG).show()
-                FtpService.error = null
-            }
-        }
-
-        sw.setOnClickListener {
-            if (sw.isChecked) {
-                if (Build.VERSION.SDK_INT >= 33 &&
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
-                }
-                ContextCompat.startForegroundService(this, Intent(this, FtpService::class.java))
-            } else {
-                stopService(Intent(this, FtpService::class.java))
-            }
-        }
-
-        v.findViewById<View>(R.id.ftpNewPass).setOnClickListener {
-            prefs.edit().putString("pass", (100000..999999).random().toString()).apply()
-            if (FtpService.running) {
-                Toast.makeText(this, "Desligue e ligue o servidor para aplicar", Toast.LENGTH_LONG).show()
-            }
-            refresh()
-        }
-
-        val dialog = BottomSheetDialog(this)
-        dialog.setContentView(v)
-        (v.parent as View).setBackgroundColor(Color.TRANSPARENT)
-        FtpService.onChange = { refresh() }
-        dialog.setOnDismissListener { FtpService.onChange = null }
-        refresh()
-        dialog.show()
-    }
 
     override fun onResume() {
         super.onResume()

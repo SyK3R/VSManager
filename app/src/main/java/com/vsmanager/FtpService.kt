@@ -52,12 +52,16 @@ class FtpService : Service() {
 
         val p = getSharedPreferences("ftp", Context.MODE_PRIVATE)
         val port = p.getInt("port", 2121)
-        val user = p.getString("user", "vsmanager") ?: "vsmanager"
+        val user = p.getString("user", "admin") ?: "admin"
         val pass = p.getString("pass", "") ?: ""
+        val anon = p.getBoolean("anon", false)
+        val canWrite = p.getBoolean("write", true)
         val root = File(p.getString("root", Environment.getExternalStorageDirectory().absolutePath)!!)
 
+        if (!anon && pass.isEmpty()) { fail("Defina uma senha ou ative o login anonimo"); return START_NOT_STICKY }
+
         try {
-            val s = SimpleFtpServer(port, root, user, pass)
+            val s = SimpleFtpServer(port, root, user, pass, anon, !canWrite)
             s.start()
             server = s
             running = true; error = null
@@ -87,7 +91,13 @@ class FtpService : Service() {
         super.onDestroy()
     }
 
-    private fun notifyChange() { Handler(Looper.getMainLooper()).post { onChange?.invoke() } }
+    private fun notifyChange() {
+        Handler(Looper.getMainLooper()).post { onChange?.invoke() }
+        try {
+            android.service.quicksettings.TileService.requestListeningState(
+                applicationContext, android.content.ComponentName(applicationContext, FtpTileService::class.java))
+        } catch (_: Exception) {}
+    }
 
     private fun startInForeground() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
