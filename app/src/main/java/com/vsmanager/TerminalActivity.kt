@@ -5,7 +5,6 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import java.io.BufferedReader
@@ -16,6 +15,7 @@ class TerminalActivity : AppCompatActivity() {
     private lateinit var outputText: TextView
     private lateinit var commandInput: EditText
     private lateinit var scrollView: ScrollView
+    private val history = StringBuilder() // Buffer para não travar a tela
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,19 +26,20 @@ class TerminalActivity : AppCompatActivity() {
         scrollView = findViewById(R.id.scrollView)
         val executeButton = findViewById<Button>(R.id.executeButton)
 
-        outputText.text = "Terminal VSManager\nDigite comandos para executar no sistema.\nEx: rm -rf /sdcard/Teste\n\n"
+        // Histórico inicial
+        history.append("Terminal VSManager (Shizuku)\n")
+        history.append("Digite comandos para executar no sistema.\nEx: ls /sdcard/\n\n")
+        outputText.text = history.toString()
 
         executeButton.setOnClickListener {
             val command = commandInput.text.toString().trim()
             if (command.isNotEmpty()) {
-                // Alerta para comandos perigosos
-                if (command.contains("rm -rf") || command.contains("format") || command.contains("mkfs")) {
+                // Se o comando for destrutivo, pede confirmação
+                if (command.contains("rm -rf") || command.contains("uninstall") || command.contains("format")) {
                     AlertDialog.Builder(this)
                         .setTitle("Cuidado!")
                         .setMessage("Você está prestes a executar um comando destrutivo:\n\n$command\n\nTem certeza?")
-                        .setPositiveButton("Executar") { _, _ ->
-                            runCommand(command)
-                        }
+                        .setPositiveButton("Executar") { _, _ -> runCommand(command) }
                         .setNegativeButton("Cancelar", null)
                         .show()
                 } else {
@@ -48,7 +49,6 @@ class TerminalActivity : AppCompatActivity() {
             }
         }
 
-        // Para rodar ao apertar "Enter" no teclado
         commandInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
                 executeButton.performClick()
@@ -57,24 +57,19 @@ class TerminalActivity : AppCompatActivity() {
         }
     }
 
-    private fun appendOutput(text: String) {
-        outputText.append(text)
-        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-    }
-
     private fun runCommand(command: String) {
-        appendOutput("\n$ $command\n")
-        
+        history.append("\n$ $command\n")
+        outputText.text = history.toString() // Mostra o comando digitado na hora
+        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+
         Thread {
             try {
-                // Executa com Shizuku (se disponível) ou como usuário normal
                 val process = try {
                     val shizukuClass = Class.forName("rikka.shizuku.Shizuku")
                     val newProcessMethod = shizukuClass.getDeclaredMethod(
                         "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java
                     )
                     newProcessMethod.isAccessible = true
-                    // O segredo está aqui: passar "sh", "-c", command
                     newProcessMethod.invoke(null, arrayOf("sh", "-c", command), null, null) as rikka.shizuku.ShizukuRemoteProcess
                 } catch (e: Exception) {
                     Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
@@ -83,18 +78,27 @@ class TerminalActivity : AppCompatActivity() {
                 val reader = BufferedReader(InputStreamReader(process.inputStream))
                 var line: String?
                 while (reader.readLine().also { line = it } != null) {
-                    runOnUiThread { appendOutput("$line\n") }
+                    history.append("$line\n") // Só adiciona no buffer
                 }
 
                 val errorReader = BufferedReader(InputStreamReader(process.errorStream))
                 while (errorReader.readLine().also { line = it } != null) {
-                    runOnUiThread { appendOutput("$line\n") }
+                    history.append("$line\n") // Só adiciona no buffer
                 }
                 
                 process.waitFor()
-                runOnUiThread { appendOutput("Concluído.\n") }
+                
+                // Atualiza a tela UMA VEZ SÓ no final
+                runOnUiThread {
+                    outputText.text = history.toString()
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
             } catch (e: Exception) {
-                runOnUiThread { appendOutput("Erro: ${e.message}\n") }
+                history.append("Erro: ${e.message}\n")
+                runOnUiThread {
+                    outputText.text = history.toString()
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                }
             }
         }.start()
     }
